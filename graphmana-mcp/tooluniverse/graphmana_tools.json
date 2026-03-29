@@ -1,0 +1,193 @@
+[
+  {
+    "name": "GraphMana_QueryVariants",
+    "type": "Genomics",
+    "description": "Query genomic variants from a GraphMana Neo4j database by region, gene, consequence, population, or allele frequency. Supports filtering by chromosome, position range, variant type, MAF, impact level, and population membership.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "chr": {
+          "type": "string",
+          "description": "Chromosome ID (e.g. '22' or 'chr22')"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Start position (inclusive)"
+        },
+        "end": {
+          "type": "integer",
+          "description": "End position (inclusive)"
+        },
+        "gene": {
+          "type": "string",
+          "description": "Gene symbol (e.g. 'BRCA1') or Ensembl ID"
+        },
+        "variant_type": {
+          "type": "string",
+          "description": "Variant type: SNP, INDEL, SV"
+        },
+        "maf_min": {
+          "type": "number",
+          "description": "Minimum minor allele frequency"
+        },
+        "maf_max": {
+          "type": "number",
+          "description": "Maximum minor allele frequency"
+        },
+        "consequence": {
+          "type": "string",
+          "description": "VEP consequence type (e.g. 'missense_variant')"
+        },
+        "impact": {
+          "type": "string",
+          "description": "Impact level: HIGH, MODERATE, LOW, MODIFIER"
+        },
+        "populations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Filter to variants present in these populations"
+        }
+      }
+    },
+    "examples": [
+      {
+        "description": "Find high-impact variants in BRCA1",
+        "arguments": { "gene": "BRCA1", "impact": "HIGH" }
+      },
+      {
+        "description": "Find rare missense variants on chromosome 22",
+        "arguments": { "chr": "22", "consequence": "missense_variant", "maf_max": 0.01 }
+      }
+    ]
+  },
+  {
+    "name": "GraphMana_GetSamples",
+    "type": "Genomics",
+    "description": "Retrieve sample and population metadata from a GraphMana database. Returns sample IDs, population assignments, sex, QC statistics, and population-level summaries.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query_type": {
+          "type": "string",
+          "enum": ["samples", "populations", "cohort"],
+          "description": "What to retrieve: 'samples' for individual sample records, 'populations' for population summaries, 'cohort' for samples in a named cohort"
+        },
+        "cohort_name": {
+          "type": "string",
+          "description": "Cohort name (required when query_type is 'cohort')"
+        },
+        "include_excluded": {
+          "type": "boolean",
+          "description": "Include soft-deleted samples (default false)"
+        }
+      },
+      "required": ["query_type"]
+    },
+    "examples": [
+      {
+        "description": "List all populations and their sample counts",
+        "arguments": { "query_type": "populations" }
+      },
+      {
+        "description": "Get samples in the 'European' cohort",
+        "arguments": { "query_type": "cohort", "cohort_name": "European" }
+      }
+    ]
+  },
+  {
+    "name": "GraphMana_AlleleFrequencies",
+    "type": "Genomics",
+    "description": "Retrieve per-population allele frequencies from a GraphMana database (FAST PATH — runs in seconds regardless of sample count). Returns allele counts, sample counts, and allele frequencies broken out by population for variants in the specified region.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "chr": {
+          "type": "string",
+          "description": "Chromosome ID (e.g. '22' or 'chr22')"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Start position (inclusive)"
+        },
+        "end": {
+          "type": "integer",
+          "description": "End position (inclusive)"
+        }
+      },
+      "required": ["chr"]
+    },
+    "examples": [
+      {
+        "description": "Get allele frequencies for a region on chromosome 22",
+        "arguments": { "chr": "22", "start": 16000000, "end": 17000000 }
+      }
+    ]
+  },
+  {
+    "name": "GraphMana_GenotypeMatrix",
+    "type": "Genomics",
+    "description": "Extract a samples-by-variants genotype matrix from a GraphMana database (FULL PATH — unpacks packed genotype arrays). Values: 0=HomRef, 1=Het, 2=HomAlt, 3=Missing. Use small regions to avoid excessive memory usage.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "chr": {
+          "type": "string",
+          "description": "Chromosome ID"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Start position (inclusive). Strongly recommended."
+        },
+        "end": {
+          "type": "integer",
+          "description": "End position (inclusive). Strongly recommended."
+        }
+      },
+      "required": ["chr"]
+    },
+    "examples": [
+      {
+        "description": "Get genotype matrix for a small region on chr22",
+        "arguments": { "chr": "22", "start": 16050000, "end": 16060000 }
+      }
+    ]
+  },
+  {
+    "name": "GraphMana_ExportData",
+    "type": "Genomics",
+    "description": "Export data from a GraphMana database to standard genomics file formats. Supports: VCF, PLINK 1.9/2.0, EIGENSTRAT, TreeMix, SFS (dadi/fastsimcoal2), Beagle, STRUCTURE, Genepop, BED, haplotype, and TSV.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["vcf", "plink", "plink2", "eigenstrat", "treemix", "sfs-dadi", "sfs-fsc", "beagle", "structure", "genepop", "bed", "hap", "tsv"],
+          "description": "Output file format"
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Path for the output file"
+        },
+        "chr": {
+          "type": "string",
+          "description": "Optional chromosome filter"
+        },
+        "populations": {
+          "type": "string",
+          "description": "Optional comma-separated population filter"
+        }
+      },
+      "required": ["format", "output_path"]
+    },
+    "examples": [
+      {
+        "description": "Export to TreeMix format",
+        "arguments": { "format": "treemix", "output_path": "/tmp/treemix.gz" }
+      },
+      {
+        "description": "Export chromosome 22 to PLINK format",
+        "arguments": { "format": "plink", "output_path": "/tmp/chr22", "chr": "22" }
+      }
+    ]
+  }
+]

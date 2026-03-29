@@ -1,0 +1,88 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# Maven
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+*.whl
+
+# Data files
+*.vcf
+*.vcf.gz
+*.vcf.gz.tbi
+*.bam
+*.bai
+*.fasta
+*.fa
+*.fq
+*.fastq
+*.fastq.gz
+*.bed
+*.gff
+*.gtf
+*.sam
+
+# Large test/benchmark data (symlinks to GraphPop datasets)
+data/1000g/
+data/rice3k/
+
+# Benchmark generated outputs
+benchmarks/results/1kgp_chr22_csv/
+benchmarks/results/1kgp_chr22_exports/
+benchmarks/results/rice3k_chr1_csv/
+results/bench/*.treemix.gz
+results/bench/*.fs
+results/bench/*.vcf.gz
+results/bench/*.bed
+results/bench/*.tsv
+
+# Neo4j data
+data/neo4j/
+neo4j_data/
+neo4j-benchmark/data/
+neo4j-benchmark/logs/
+neo4j-benchmark/run/
+
+# Generated CSVs
+csv_out/
+
+# Docker volumes
+neo4j-data/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# pytest / ruff caches
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.local

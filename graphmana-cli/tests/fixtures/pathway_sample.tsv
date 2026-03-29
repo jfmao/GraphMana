@@ -1,0 +1,5 @@
+gene_symbol	pathway_id	pathway_name	source
+BRCA1	hsa03440	Homologous recombination	KEGG
+TP53	hsa04115	p53 signaling pathway	KEGG
+MYC	hsa05200	Pathways in cancer	KEGG
+BRCA1	R-HSA-5693532	DNA Double-Strand Break Repair	Reactome

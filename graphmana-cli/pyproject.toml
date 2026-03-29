@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphmana"
+version = "0.1.0"
+description = "Graph-native data management platform for variant genomics"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "neo4j>=5.0",
+    "cyvcf2>=0.30",
+    "numpy>=1.24",
+    "pyliftover>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+    "black>=24.0",
+]
+
+[project.scripts]
+graphmana = "graphmana.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
