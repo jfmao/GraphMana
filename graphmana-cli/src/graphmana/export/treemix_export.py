@@ -44,7 +44,7 @@ class TreeMixExporter(BaseExporter):
 
         with gzip.open(out_path, "wt") as f:
             for chrom in target_chroms:
-                for props in self._iter_variants(chrom):
+                for props in self._iter_variants_fast(chrom, ordered=False):
                     var_pop_ids = props.get("pop_ids")
                     ac = props.get("ac")
                     an = props.get("an")

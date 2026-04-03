@@ -438,17 +438,13 @@ class TestVariantDataCreation:
 # ---------------------------------------------------------------------------
 
 
-class TestCollectVariantsByChr:
-    """Test chromosome-grouped variant collection."""
+class TestStreamVariantsByChr:
+    """Test chromosome-grouped variant streaming."""
 
-    def test_groups_by_chromosome(self):
-        """Variants from parser are grouped by chromosome."""
-        from graphmana.ingest.vcf_parser import VariantRecord
-
+    def _make_ingester(self):
         conn = _make_conn()
         pm = _make_pop_map(["S1"], ["POP1"], {"S1": "POP1"})
-
-        ingester = IncrementalIngester(
+        return IncrementalIngester(
             conn=conn,
             pop_map_new=pm,
             n_existing=0,
@@ -460,34 +456,15 @@ class TestCollectVariantsByChr:
             n_total_samples=1,
         )
 
-        # Create mock records with different chromosomes
-        rec1 = VariantRecord(
-            id="chr1:100:A:T",
-            chr="chr1",
-            pos=100,
-            ref="A",
-            alt="T",
-            variant_type="SNP",
-            ac=[1],
-            an=[2],
-            af=[0.5],
-            het_count=[1],
-            hom_alt_count=[0],
-            het_exp=[0.5],
-            ac_total=1,
-            an_total=2,
-            af_total=0.5,
-            call_rate=1.0,
-            gt_packed=vectorized_gt_pack(np.array([1], dtype=np.int8)),
-            phase_packed=bytes(1),
-            ploidy_packed=b"",
-        )
-        rec2 = VariantRecord(
-            id="chr2:200:G:C",
-            chr="chr2",
-            pos=200,
-            ref="G",
-            alt="C",
+    def _make_record(self, vid, chrom, pos, ref="A", alt="T", gt_code=0):
+        from graphmana.ingest.vcf_parser import VariantRecord
+
+        return VariantRecord(
+            id=vid,
+            chr=chrom,
+            pos=pos,
+            ref=ref,
+            alt=alt,
             variant_type="SNP",
             ac=[0],
             an=[2],
@@ -499,19 +476,67 @@ class TestCollectVariantsByChr:
             an_total=2,
             af_total=0.0,
             call_rate=1.0,
-            gt_packed=vectorized_gt_pack(np.array([0], dtype=np.int8)),
+            gt_packed=vectorized_gt_pack(np.array([gt_code], dtype=np.int8)),
             phase_packed=bytes(1),
             ploidy_packed=b"",
         )
 
-        mock_parser = [rec1, rec2]
+    def test_groups_by_chromosome(self):
+        """Variants from parser are streamed grouped by chromosome."""
+        ingester = self._make_ingester()
+        rec1 = self._make_record("chr1:100:A:T", "chr1", 100)
+        rec2 = self._make_record("chr2:200:G:C", "chr2", 200, ref="G", alt="C")
 
-        result = ingester._collect_variants_by_chr(mock_parser, filter_chain=None)
+        result = dict(ingester._stream_variants_by_chr([rec1, rec2], filter_chain=None))
 
         assert "chr1" in result
         assert "chr2" in result
         assert "chr1:100:A:T" in result["chr1"]
         assert "chr2:200:G:C" in result["chr2"]
+
+    def test_single_chromosome_yields_once(self):
+        """All variants on the same chromosome yield as a single batch."""
+        ingester = self._make_ingester()
+        recs = [
+            self._make_record("chr1:100:A:T", "chr1", 100),
+            self._make_record("chr1:200:G:C", "chr1", 200, ref="G", alt="C"),
+            self._make_record("chr1:300:C:A", "chr1", 300, ref="C", alt="A"),
+        ]
+
+        results = list(ingester._stream_variants_by_chr(recs, filter_chain=None))
+
+        assert len(results) == 1
+        assert results[0][0] == "chr1"
+        assert len(results[0][1]) == 3
+
+    def test_empty_parser_yields_nothing(self):
+        """Empty parser produces no yields."""
+        ingester = self._make_ingester()
+        results = list(ingester._stream_variants_by_chr([], filter_chain=None))
+        assert results == []
+
+    def test_generator_yields_incrementally(self):
+        """Generator yields chromosomes one at a time, not all at once."""
+        ingester = self._make_ingester()
+        recs = [
+            self._make_record("chr1:100:A:T", "chr1", 100),
+            self._make_record("chr2:200:G:C", "chr2", 200, ref="G", alt="C"),
+            self._make_record("chr3:300:C:A", "chr3", 300, ref="C", alt="A"),
+        ]
+
+        gen = ingester._stream_variants_by_chr(recs, filter_chain=None)
+
+        chrom1, variants1 = next(gen)
+        assert chrom1 == "chr1"
+        assert len(variants1) == 1
+
+        chrom2, variants2 = next(gen)
+        assert chrom2 == "chr2"
+        assert len(variants2) == 1
+
+        chrom3, variants3 = next(gen)
+        assert chrom3 == "chr3"
+        assert len(variants3) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -546,3 +571,454 @@ class TestCLIIngestOnDuplicate:
         assert "auto" in result.output
         assert "initial" in result.output
         assert "incremental" in result.output
+
+
+# ---------------------------------------------------------------------------
+# TestRunOrchestration
+# ---------------------------------------------------------------------------
+
+
+class TestRunOrchestration:
+    """Test the full IncrementalIngester.run() orchestration."""
+
+    def test_run_returns_summary_dict(self):
+        """run() returns a summary dict with all expected keys."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        # Mock execute_read to return empty chromosome list
+        from graphmana.db.connection import _EagerResult
+
+        conn.execute_read.return_value = _EagerResult([])
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        # Empty parser — no variants to process
+        summary = ingester.run([], chunk_size=100)
+
+        assert "n_variants_extended" in summary
+        assert "n_variants_homref_extended" in summary
+        assert "n_variants_created" in summary
+        assert "n_samples_created" in summary
+        assert "n_populations_created" in summary
+        assert "n_total_samples" in summary
+        assert summary["n_total_samples"] == 3
+
+    def test_run_homref_extends_missing_chromosomes(self):
+        """Chromosomes in DB but not in new VCF get HomRef-extended."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        from graphmana.db.connection import _EagerResult
+
+        # First call: FETCH_CHROMOSOMES returns chr1 and chr2
+        # Subsequent calls: return empty results for variant IDs, population counts, etc.
+        call_count = [0]
+        chr_result = _EagerResult([{"chr": "chr1"}, {"chr": "chr2"}])
+        empty_result = _EagerResult([])
+
+        def side_effect(query, params=None):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return chr_result
+            return empty_result
+
+        conn.execute_read.side_effect = side_effect
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        # Empty parser — no new variants, so both chr1 and chr2 need HomRef extension
+        summary = ingester.run([], chunk_size=100)
+
+        # Both chromosomes should have been processed (even with 0 variants each)
+        assert summary["n_variants_extended"] == 0
+        assert summary["n_samples_created"] == 1
+
+
+# ---------------------------------------------------------------------------
+# TestServerSidePath
+# ---------------------------------------------------------------------------
+
+
+class TestServerSidePath:
+    """Test server-side Java procedure detection and fallback."""
+
+    def test_check_server_side_available(self):
+        """Detects when graphmana.extendVariants procedure exists."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        from graphmana.db.connection import _EagerResult
+
+        conn.execute_read.return_value = _EagerResult(
+            [{"name": "graphmana.extendVariants"}]
+        )
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        assert ingester._check_server_side() is True
+        assert ingester._server_side_available is True
+
+    def test_check_server_side_not_available(self):
+        """Falls back to Python path when procedure not found."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        from graphmana.db.connection import _EagerResult
+
+        conn.execute_read.return_value = _EagerResult([])
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        assert ingester._check_server_side() is False
+        assert ingester._server_side_available is False
+
+    def test_check_server_side_caches_result(self):
+        """Procedure check is cached after first call."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        from graphmana.db.connection import _EagerResult
+
+        conn.execute_read.return_value = _EagerResult([])
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        ingester._check_server_side()
+        ingester._check_server_side()
+        # Should only query once
+        assert conn.execute_read.call_count == 1
+
+    def test_check_server_side_exception_fallback(self):
+        """Exception during SHOW PROCEDURES falls back to Python path."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+
+        conn.execute_read.side_effect = Exception("Neo4j error")
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=3,
+        )
+
+        assert ingester._check_server_side() is False
+
+    def test_server_side_extend_batches_correctly(self):
+        """Server-side extend sends chunked CALL statements."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3", "S4"], ["POP1"], {"S3": "POP1", "S4": "POP1"})
+
+        # Mock execute_write to return indexable result with [0] access
+        mock_result = MagicMock()
+        mock_result.__getitem__ = MagicMock(
+            return_value={"extended": 2, "failed": 0}
+        )
+        conn.execute_write.return_value = mock_result
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=2,
+            existing_sample_ids={"S1", "S2"},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=2,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=4,
+        )
+
+        vd1 = _make_variant_data("chr1:100:A:T", "chr1", 100, n_new=2)
+        vd2 = _make_variant_data("chr1:200:G:C", "chr1", 200, n_new=2)
+
+        n_ext, n_fail = ingester._server_side_extend(
+            "chr1", {"chr1:100:A:T": vd1, "chr1:200:G:C": vd2}, chunk_size=10
+        )
+
+        assert n_ext == 2
+        assert n_fail == 0
+        conn.execute_write.assert_called_once()
+
+    def test_server_side_homref(self):
+        """Server-side HomRef extend sends correct parameters."""
+        conn = _make_conn()
+        pm = _make_pop_map(["S3", "S4"], ["POP1"], {"S3": "POP1", "S4": "POP1"})
+
+        mock_result = MagicMock()
+        mock_result.__getitem__ = MagicMock(
+            return_value={"extended": 100, "failed": 0}
+        )
+        conn.execute_write.return_value = mock_result
+
+        ingester = IncrementalIngester(
+            conn=conn,
+            pop_map_new=pm,
+            n_existing=10,
+            existing_sample_ids={f"S{i}" for i in range(10)},
+            existing_pop_ids=["POP1"],
+            packed_index_offset=10,
+            dataset_id="ds1",
+            source_file="test.vcf.gz",
+            n_total_samples=12,
+        )
+
+        n_ext, n_fail = ingester._server_side_homref("chr1", 2)
+
+        assert n_ext == 100
+        assert n_fail == 0
+        # Verify the call includes correct population AN
+        call_args = conn.execute_write.call_args
+        params = call_args[1] if call_args[1] else call_args[0][1]
+        assert params["nExisting"] == 10
+        assert params["nNew"] == 2
+        assert params["newPopIds"] == ["POP1"]
+        assert params["newPopAn"] == [4]  # 2 * 2 samples in POP1
+
+
+# ---------------------------------------------------------------------------
+# TestProvenanceRecording
+# ---------------------------------------------------------------------------
+
+
+class TestProvenanceRecording:
+    """Test provenance recording in incremental pipeline."""
+
+    @patch("graphmana.ingest.pipeline.VCFParser")
+    @patch("graphmana.db.connection.GraphDatabase")
+    def test_provenance_recorded_on_success(self, mock_gdb, mock_parser_cls):
+        """Successful incremental import records provenance."""
+        from graphmana.ingest.pipeline import run_incremental
+
+        # Setup mock driver/session
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+
+        # Various queries return different results
+        call_idx = [0]
+        responses = {
+            0: [{"ids": ["S1", "S2"]}],  # FETCH_EXISTING_SAMPLE_IDS
+            1: [{"max_idx": 1}],  # FETCH_MAX_PACKED_INDEX
+            2: [{"ids": ["POP1"]}],  # existing pop IDs
+        }
+
+        def run_side_effect(query, params=None):
+            result = MagicMock()
+            idx = call_idx[0]
+            data = responses.get(idx, [])
+            result.__iter__ = MagicMock(return_value=iter(data))
+            result.consume.return_value = MagicMock()
+            call_idx[0] += 1
+            return result
+
+        mock_session.run.side_effect = run_side_effect
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_driver.session.return_value = mock_session
+        mock_driver.verify_connectivity = MagicMock()
+        mock_driver.close = MagicMock()
+        mock_gdb.driver.return_value = mock_driver
+
+        # Setup mock parser
+        mock_parser = MagicMock()
+        mock_pm = _make_pop_map(["S3"], ["POP1"], {"S3": "POP1"})
+        mock_parser.pop_map = mock_pm
+        mock_parser.__iter__ = MagicMock(return_value=iter([]))
+        mock_parser_cls.return_value = mock_parser
+
+        with patch("graphmana.ingest.incremental.IncrementalIngester") as mock_ingester_cls:
+            mock_ingester = MagicMock()
+            mock_ingester.run.return_value = {
+                "n_variants_extended": 10,
+                "n_variants_created": 0,
+                "n_samples_created": 1,
+            }
+            mock_ingester_cls.return_value = mock_ingester
+
+            with patch("graphmana.provenance.manager.ProvenanceManager") as mock_prov_cls:
+                mock_prov = MagicMock()
+                mock_prov_cls.return_value = mock_prov
+
+                summary = run_incremental(
+                    "test.vcf.gz",
+                    "panel.tsv",
+                    neo4j_uri="bolt://localhost:7687",
+                )
+
+                assert summary["provenance_recorded"] is True
+                mock_prov.record_ingestion.assert_called_once()
+                call_kwargs = mock_prov.record_ingestion.call_args
+                # Verify mode is "incremental"
+                assert call_kwargs[1]["mode"] == "incremental" or (
+                    len(call_kwargs[0]) > 2 and call_kwargs[0][2] == "incremental"
+                )
+
+    @patch("graphmana.ingest.pipeline.VCFParser")
+    @patch("graphmana.db.connection.GraphDatabase")
+    def test_provenance_failure_does_not_block_import(self, mock_gdb, mock_parser_cls):
+        """Failed provenance recording sets flag but returns summary."""
+        from graphmana.ingest.pipeline import run_incremental
+
+        mock_driver = MagicMock()
+        mock_session = MagicMock()
+
+        call_idx = [0]
+        responses = {
+            0: [{"ids": ["S1"]}],
+            1: [{"max_idx": 0}],
+            2: [{"ids": ["POP1"]}],
+        }
+
+        def run_side_effect(query, params=None):
+            result = MagicMock()
+            idx = call_idx[0]
+            data = responses.get(idx, [])
+            result.__iter__ = MagicMock(return_value=iter(data))
+            result.consume.return_value = MagicMock()
+            call_idx[0] += 1
+            return result
+
+        mock_session.run.side_effect = run_side_effect
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+        mock_driver.session.return_value = mock_session
+        mock_driver.verify_connectivity = MagicMock()
+        mock_driver.close = MagicMock()
+        mock_gdb.driver.return_value = mock_driver
+
+        mock_parser = MagicMock()
+        mock_pm = _make_pop_map(["S2"], ["POP1"], {"S2": "POP1"})
+        mock_parser.pop_map = mock_pm
+        mock_parser.__iter__ = MagicMock(return_value=iter([]))
+        mock_parser_cls.return_value = mock_parser
+
+        with patch("graphmana.ingest.incremental.IncrementalIngester") as mock_ingester_cls:
+            mock_ingester = MagicMock()
+            mock_ingester.run.return_value = {
+                "n_variants_extended": 5,
+                "n_variants_created": 0,
+                "n_samples_created": 1,
+            }
+            mock_ingester_cls.return_value = mock_ingester
+
+            with patch("graphmana.provenance.manager.ProvenanceManager") as mock_prov_cls:
+                mock_prov = MagicMock()
+                mock_prov.record_ingestion.side_effect = Exception("DB write failed")
+                mock_prov_cls.return_value = mock_prov
+
+                summary = run_incremental(
+                    "test.vcf.gz",
+                    "panel.tsv",
+                    neo4j_uri="bolt://localhost:7687",
+                )
+
+                # Import still succeeds
+                assert summary["n_variants_extended"] == 5
+                # But provenance flag is False
+                assert summary["provenance_recorded"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestByteBoundaryEdgeCases
+# ---------------------------------------------------------------------------
+
+
+class TestByteBoundaryEdgeCases:
+    """Test packed array operations at byte boundaries."""
+
+    def test_extend_at_4_sample_boundary(self):
+        """4 existing samples = exactly 1 byte of gt_packed; extend to 5."""
+        existing_cyvcf2 = np.array([0, 1, 3, 2], dtype=np.int8)
+        existing_gt = vectorized_gt_pack(existing_cyvcf2)
+        assert len(existing_gt) == 1  # 4 samples = 1 byte
+
+        new_gt = np.array([1], dtype=np.int8)  # 1 new sample (Het)
+        result = extend_gt_packed(existing_gt, 4, new_gt)
+
+        unpacked = unpack_genotypes(result, 5)
+        expected_existing = GT_REMAP[existing_cyvcf2].astype(np.int8)
+        np.testing.assert_array_equal(unpacked[:4], expected_existing)
+        expected_new = GT_REMAP[new_gt].astype(np.int8)
+        np.testing.assert_array_equal(unpacked[4:], expected_new)
+
+    def test_extend_at_8_sample_phase_boundary(self):
+        """8 existing samples = exactly 1 byte of phase_packed; extend to 9."""
+        from graphmana.ingest.array_ops import extend_phase_packed
+
+        existing_phase = bytes([0b10101010])  # 8 samples, alternating phase
+        new_phase = np.array([1], dtype=np.uint8)
+        result = extend_phase_packed(existing_phase, 8, new_phase)
+
+        unpacked = unpack_phase(result, 9)
+        # Existing 8 samples preserved
+        for i in range(8):
+            assert unpacked[i] == ((0b10101010 >> i) & 1)
+        # New sample has phase=1
+        assert unpacked[8] == 1
+
+    def test_extend_single_sample(self):
+        """Extend from 1 existing sample to 2."""
+        existing_cyvcf2 = np.array([1], dtype=np.int8)  # Het
+        existing_gt = vectorized_gt_pack(existing_cyvcf2)
+
+        new_gt = np.array([3], dtype=np.int8)  # HomAlt in cyvcf2
+        result = extend_gt_packed(existing_gt, 1, new_gt)
+
+        unpacked = unpack_genotypes(result, 2)
+        assert unpacked[0] == GT_REMAP[1]  # Het
+        assert unpacked[1] == GT_REMAP[3]  # HomAlt

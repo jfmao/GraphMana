@@ -61,6 +61,102 @@ RETURN v
 ORDER BY v.pos
 """
 
+# ---------------------------------------------------------------------------
+# Smart variant query building blocks
+# ---------------------------------------------------------------------------
+# Three column sets for different export needs:
+#   FAST — population arrays + metadata (no packed genotype arrays)
+#   GENOTYPES — packed arrays + metadata (no population arrays)
+#   FULL — everything (legacy, avoid for large datasets)
+#
+# Two ordering modes:
+#   Ordered — ORDER BY v.pos (for positional output: BED, TSV, VCF, PLINK)
+#   Unordered — no sort (for aggregation: TreeMix, SFS)
+#
+# Batched pagination: add WHERE v.pos > $last_pos ... LIMIT $batch_size
+#   to ordered queries for large chromosomes (avoids GC pauses from sorting
+#   millions of rows in Neo4j heap).
+
+_FAST_COLUMNS = """
+       v.variantId AS variantId, v.chr AS chr, v.pos AS pos,
+       v.ref AS ref, v.alt AS alt, v.variant_type AS variant_type,
+       v.pop_ids AS pop_ids, v.ac AS ac, v.an AS an, v.af AS af,
+       v.ac_total AS ac_total, v.an_total AS an_total,
+       v.af_total AS af_total, v.call_rate AS call_rate,
+       v.het_count AS het_count, v.hom_alt_count AS hom_alt_count,
+       v.het_exp AS het_exp, v.ancestral_allele AS ancestral_allele,
+       v.is_polarized AS is_polarized,
+       v.multiallelic_site AS multiallelic_site,
+       v.allele_index AS allele_index,
+       v.qual AS qual, v.filter AS filter,
+       v.consequence AS consequence, v.impact AS impact,
+       v.gene_symbol AS gene_symbol,
+       v.liftover_status AS liftover_status,
+       v.population_specificity AS population_specificity
+"""
+
+_GENOTYPES_COLUMNS = """
+       v.variantId AS variantId, v.chr AS chr, v.pos AS pos,
+       v.ref AS ref, v.alt AS alt, v.variant_type AS variant_type,
+       v.gt_packed AS gt_packed, v.phase_packed AS phase_packed,
+       v.ploidy_packed AS ploidy_packed,
+       v.ac_total AS ac_total, v.an_total AS an_total,
+       v.af_total AS af_total, v.call_rate AS call_rate,
+       v.qual AS qual, v.filter AS filter,
+       v.multiallelic_site AS multiallelic_site,
+       v.allele_index AS allele_index,
+       v.info_raw AS info_raw, v.csq_raw AS csq_raw
+"""
+
+# --- FAST PATH queries (no packed arrays) ---
+
+FETCH_VARIANTS_BY_CHR_FAST = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "RETURN" + _FAST_COLUMNS + "\nORDER BY v.pos"
+)
+
+FETCH_VARIANTS_BY_CHR_FAST_UNORDERED = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "RETURN" + _FAST_COLUMNS
+)
+
+FETCH_VARIANTS_BY_CHR_FAST_BATCHED = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "WHERE v.pos > $last_pos\n"
+    "RETURN" + _FAST_COLUMNS + "\nORDER BY v.pos\nLIMIT $batch_size"
+)
+
+FETCH_VARIANTS_REGION_FAST = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "WHERE v.pos >= $start AND v.pos <= $end\n"
+    "RETURN" + _FAST_COLUMNS + "\nORDER BY v.pos"
+)
+
+FETCH_VARIANTS_REGION_FAST_UNORDERED = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "WHERE v.pos >= $start AND v.pos <= $end\n"
+    "RETURN" + _FAST_COLUMNS
+)
+
+# --- GENOTYPES PATH queries (packed arrays, no pop arrays) ---
+
+FETCH_VARIANTS_BY_CHR_GENOTYPES = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "RETURN" + _GENOTYPES_COLUMNS + "\nORDER BY v.pos"
+)
+
+FETCH_VARIANTS_BY_CHR_GENOTYPES_BATCHED = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "WHERE v.pos > $last_pos\n"
+    "RETURN" + _GENOTYPES_COLUMNS + "\nORDER BY v.pos\nLIMIT $batch_size"
+)
+
+FETCH_VARIANTS_REGION_GENOTYPES = (
+    "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome {chromosomeId: $chr})\n"
+    "WHERE v.pos >= $start AND v.pos <= $end\n"
+    "RETURN" + _GENOTYPES_COLUMNS + "\nORDER BY v.pos"
+)
+
 FETCH_VCF_HEADER = """
 MATCH (h:VCFHeader)
 RETURN h ORDER BY h.import_date DESC LIMIT 1
@@ -373,8 +469,9 @@ REMOVE s.excluded, s.exclusion_reason
 RETURN count(s) AS updated
 """
 
-GET_SAMPLE = """
-MATCH (s:Sample {sampleId: $sample_id})-[:IN_POPULATION]->(p:Population)
+GET_SAMPLE = f"""
+MATCH (s:Sample {{sampleId: $sample_id}})-[:IN_POPULATION]->(p:Population)
+WHERE {ACTIVE_SAMPLE_FILTER}
 RETURN s.sampleId AS sampleId,
        p.populationId AS population,
        s.packed_index AS packed_index,
@@ -435,11 +532,12 @@ ORDER BY s.packed_index
 # Sample reassignment queries
 # ---------------------------------------------------------------------------
 
-REASSIGN_SAMPLE_POPULATION = """
-MATCH (s:Sample {sampleId: $sample_id})-[r:IN_POPULATION]->(:Population)
+REASSIGN_SAMPLE_POPULATION = f"""
+MATCH (s:Sample {{sampleId: $sample_id}})-[r:IN_POPULATION]->(:Population)
+WHERE {ACTIVE_SAMPLE_FILTER}
 DELETE r
 WITH s
-MATCH (p:Population {populationId: $new_population})
+MATCH (p:Population {{populationId: $new_population}})
 CREATE (s)-[:IN_POPULATION]->(p)
 """
 
@@ -773,6 +871,14 @@ RETURN h ORDER BY h.import_date DESC
 GET_VCF_HEADER = """
 MATCH (h:VCFHeader {dataset_id: $dataset_id})
 RETURN h
+"""
+
+SEARCH_INGESTION_LOGS = """
+MATCH (l:IngestionLog)
+WHERE ($since IS NULL OR l.import_date >= $since)
+  AND ($until IS NULL OR l.import_date <= $until)
+  AND ($dataset_id IS NULL OR l.dataset_id = $dataset_id)
+RETURN l ORDER BY l.import_date DESC
 """
 
 PROVENANCE_SUMMARY = """

@@ -13,6 +13,7 @@ from graphmana.db.queries import (
     LIST_INGESTION_LOGS,
     LIST_VCF_HEADERS,
     PROVENANCE_SUMMARY,
+    SEARCH_INGESTION_LOGS,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,30 @@ class ProvenanceManager:
             result = session.run(GET_INGESTION_LOG, {"log_id": log_id})
             record = result.single()
             return dict(record["l"]) if record else None
+
+    def search(
+        self,
+        *,
+        since: str | None = None,
+        until: str | None = None,
+        dataset_id: str | None = None,
+    ) -> list[dict]:
+        """Search ingestion logs by date range and/or dataset ID.
+
+        Args:
+            since: ISO date string (inclusive). None = no lower bound.
+            until: ISO date string (inclusive). None = no upper bound.
+            dataset_id: Filter by dataset identifier. None = all datasets.
+
+        Returns:
+            List of IngestionLog property dicts matching the criteria.
+        """
+        with self._conn.driver.session() as session:
+            result = session.run(
+                SEARCH_INGESTION_LOGS,
+                {"since": since, "until": until, "dataset_id": dataset_id},
+            )
+            return [dict(record["l"]) for record in result]
 
     def list_vcf_headers(self) -> list[dict]:
         """List all VCF header nodes, ordered by import_date DESC.

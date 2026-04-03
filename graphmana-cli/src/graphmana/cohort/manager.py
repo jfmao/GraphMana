@@ -124,10 +124,14 @@ class CohortManager:
                 "n_samples": None,
             }
 
-        # Check syntax via EXPLAIN
+        # Check syntax via EXPLAIN.
+        # Note: EXPLAIN does not support parameterized queries, so we must
+        # prepend to the user string. The write-keyword check above prevents
+        # mutation, but a crafted query could still read unintended data.
+        # Cohort definitions should only be created by trusted administrators.
         try:
             with self._conn.driver.session() as session:
-                session.run(f"EXPLAIN {cypher_query}").consume()
+                session.run("EXPLAIN " + cypher_query).consume()
         except Exception as exc:
             return {
                 "valid": False,

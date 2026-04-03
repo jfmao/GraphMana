@@ -57,11 +57,14 @@ class GraphManaConnection:
             auth=(self._user, self._password),
             # Keep TCP connections alive during long streaming exports (10+ minutes).
             keep_alive=True,
-            # Allow connections to live for 2 hours so a single chromosome export
-            # session is never closed mid-stream by the pool reaper.
-            max_connection_lifetime=7200,
+            # Allow connections to live for 4 hours so whole-genome export
+            # sessions are never closed mid-stream by the pool reaper.
+            max_connection_lifetime=14400,
             # Generous acquisition timeout so slow-starting cluster nodes don't fail.
             connection_acquisition_timeout=120,
+            # Long socket timeout for streaming 70M+ variants — Neo4j may pause
+            # for disk I/O when pagecache is smaller than the database.
+            connection_timeout=600,
         )
         self._driver.verify_connectivity()
         return self
@@ -74,9 +77,9 @@ class GraphManaConnection:
     def execute_read(self, query: str, parameters: dict | None = None):
         """Execute a read transaction and return an EagerResult.
 
-        Uses Result.fetch() to materialize all records before the session
-        closes, returning an EagerResult-like wrapper that supports
-        .single(), iteration, and len().
+        Materializes all records via ``list(result)`` while the session is
+        still open, then wraps them in an EagerResult-like object that
+        supports ``.single()``, iteration, and ``len()``.
         """
         with self._driver.session(database=self._database) as session:
             result = session.run(query, parameters or {})

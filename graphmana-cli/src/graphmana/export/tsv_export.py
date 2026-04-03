@@ -68,7 +68,7 @@ class TSVExporter(BaseExporter):
             f.write("\t".join(cols) + "\n")
 
             for chrom in target_chroms:
-                for props in self._iter_variants(chrom):
+                for props in self._iter_variants_fast(chrom, ordered=False):
                     values = []
                     for col in cols:
                         val = props.get(col)

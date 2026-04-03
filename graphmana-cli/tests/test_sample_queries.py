@@ -1,11 +1,13 @@
 """Tests for sample management Cypher query constants."""
 
 from graphmana.db.queries import (
+    ACTIVE_SAMPLE_FILTER,
     COUNT_SAMPLES_BY_STATUS,
     EXCLUDE_SAMPLES,
     GET_SAMPLE,
     LIST_ALL_SAMPLES,
     LIST_SAMPLES_BY_POPULATION,
+    REASSIGN_SAMPLE_POPULATION,
     RESTORE_SAMPLES,
 )
 
@@ -65,6 +67,12 @@ class TestGetSampleQuery:
     def test_joins_population(self):
         assert "IN_POPULATION" in GET_SAMPLE
 
+    def test_applies_soft_delete_filter(self):
+        """GET_SAMPLE must exclude soft-deleted samples via ACTIVE_SAMPLE_FILTER."""
+        from graphmana.db.queries import ACTIVE_SAMPLE_FILTER
+
+        assert ACTIVE_SAMPLE_FILTER in GET_SAMPLE
+
 
 class TestListQueries:
     """Verify list sample queries."""
@@ -81,6 +89,27 @@ class TestListQueries:
 
     def test_list_by_population_returns_excluded(self):
         assert "excluded" in LIST_SAMPLES_BY_POPULATION
+
+
+class TestReassignQuery:
+    """Verify REASSIGN_SAMPLE_POPULATION query."""
+
+    def test_has_sample_id_param(self):
+        assert "$sample_id" in REASSIGN_SAMPLE_POPULATION
+
+    def test_has_new_population_param(self):
+        assert "$new_population" in REASSIGN_SAMPLE_POPULATION
+
+    def test_deletes_old_relationship(self):
+        assert "DELETE" in REASSIGN_SAMPLE_POPULATION
+
+    def test_creates_new_relationship(self):
+        assert "CREATE" in REASSIGN_SAMPLE_POPULATION
+        assert "IN_POPULATION" in REASSIGN_SAMPLE_POPULATION
+
+    def test_applies_soft_delete_filter(self):
+        """REASSIGN must exclude soft-deleted samples."""
+        assert ACTIVE_SAMPLE_FILTER in REASSIGN_SAMPLE_POPULATION
 
 
 class TestCountQuery:

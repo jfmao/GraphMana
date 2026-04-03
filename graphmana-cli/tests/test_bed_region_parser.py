@@ -83,6 +83,77 @@ class TestBEDParseFile:
         tmp_path.unlink()
 
 
+class TestBEDParseEdgeCases:
+    """Test edge cases in BED file parsing."""
+
+    def test_empty_file(self):
+        """Empty BED file yields no records."""
+        with tempfile.NamedTemporaryFile(suffix=".bed", mode="w", delete=False) as tmp:
+            tmp.write("")
+            tmp_path = Path(tmp.name)
+
+        parser = BEDRegionParser(MagicMock())
+        records = list(parser._parse_file(tmp_path))
+        assert records == []
+        tmp_path.unlink()
+
+    def test_only_comments_and_headers(self):
+        """File with only comments/track lines yields no records."""
+        with tempfile.NamedTemporaryFile(suffix=".bed", mode="w", delete=False) as tmp:
+            tmp.write("# header comment\n")
+            tmp.write("track name=test visibility=2\n")
+            tmp.write("browser position chr1:1-1000\n")
+            tmp.write("\n")
+            tmp_path = Path(tmp.name)
+
+        parser = BEDRegionParser(MagicMock())
+        records = list(parser._parse_file(tmp_path))
+        assert records == []
+        tmp_path.unlink()
+
+    def test_inverted_coordinates_skipped(self):
+        """Regions where start > end after conversion are skipped."""
+        with tempfile.NamedTemporaryFile(suffix=".bed", mode="w", delete=False) as tmp:
+            # After 0-based→1-based: start=201, end=100 → invalid
+            tmp.write("chr1\t200\t100\tinverted\n")
+            tmp.write("chr1\t100\t200\tvalid\n")
+            tmp_path = Path(tmp.name)
+
+        parser = BEDRegionParser(MagicMock())
+        records = list(parser._parse_file(tmp_path))
+        assert len(records) == 1
+        assert records[0]["id"] == "valid"
+        tmp_path.unlink()
+
+    def test_less_than_3_columns_skipped(self):
+        """Lines with fewer than 3 columns are skipped."""
+        with tempfile.NamedTemporaryFile(suffix=".bed", mode="w", delete=False) as tmp:
+            tmp.write("chr1\t100\n")  # Only 2 columns
+            tmp.write("chr1\n")  # Only 1 column
+            tmp.write("chr1\t100\t200\tvalid\n")
+            tmp_path = Path(tmp.name)
+
+        parser = BEDRegionParser(MagicMock())
+        records = list(parser._parse_file(tmp_path))
+        assert len(records) == 1
+        assert records[0]["id"] == "valid"
+        tmp_path.unlink()
+
+    def test_zero_length_interval(self):
+        """BED interval where start == end-1 produces a single-base region."""
+        with tempfile.NamedTemporaryFile(suffix=".bed", mode="w", delete=False) as tmp:
+            # 0-based [100, 101) → 1-based [101, 101] = single base
+            tmp.write("chr1\t100\t101\tsingle_base\n")
+            tmp_path = Path(tmp.name)
+
+        parser = BEDRegionParser(MagicMock())
+        records = list(parser._parse_file(tmp_path))
+        assert len(records) == 1
+        assert records[0]["start"] == 101
+        assert records[0]["end"] == 101
+        tmp_path.unlink()
+
+
 class TestBEDLoadBatch:
     """Test _load_batch with mocked connection."""
 
@@ -90,16 +161,16 @@ class TestBEDLoadBatch:
         mock_conn = MagicMock()
         mock_session = MagicMock()
         # MERGE elements — no return value needed
-        # FIND_VARIANTS returns some variant IDs
+        # FIND_VARIANTS_IN_INTERVAL_BATCH returns variant+region pairs
         mock_result_find = MagicMock()
         mock_result_find.__iter__ = MagicMock(
-            return_value=iter([{"variantId": "chr1:1050:A:G"}])
+            return_value=iter([{"variantId": "chr1:1050:A:G", "regionId": "enhancer_1"}])
         )
         # CREATE edges — no specific return
         mock_result_merge = MagicMock()
         mock_session.run.side_effect = [
             mock_result_merge,  # MERGE_REGULATORY_ELEMENT_BATCH
-            mock_result_find,   # FIND_VARIANTS_IN_INTERVAL
+            mock_result_find,   # FIND_VARIANTS_IN_INTERVAL_BATCH
             mock_result_merge,  # CREATE_IN_REGION_BATCH
         ]
         mock_session.__enter__ = MagicMock(return_value=mock_session)

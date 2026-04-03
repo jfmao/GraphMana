@@ -47,7 +47,7 @@ class BEDExporter(BaseExporter):
 
         with open(output, "w") as f:
             for chrom in target_chroms:
-                for props in self._iter_variants(chrom):
+                for props in self._iter_variants_fast(chrom, ordered=False):
                     pos = props.get("pos", 0)
                     start = pos - 1  # BED is 0-based half-open
                     end = pos

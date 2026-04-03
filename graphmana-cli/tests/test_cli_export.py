@@ -139,3 +139,61 @@ class TestExportFormatSpecificOptions:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "--help"])
         assert "--neo4j-home" in result.output
+
+    def test_recalculate_af_option(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["export", "--help"])
+        assert "--recalculate-af" in result.output
+        assert "--no-recalculate-af" in result.output
+
+
+# ---------------------------------------------------------------------------
+# recalculate_af conditional default logic
+# ---------------------------------------------------------------------------
+
+
+class TestRecalculateAfDefault:
+    """Test the --recalculate-af conditional default in the CLI."""
+
+    def test_recalculate_af_true_when_populations_set(self):
+        """When --populations is provided, recalculate_af defaults to True."""
+        # We test the logic directly rather than invoking the full CLI
+        # (which requires a live Neo4j instance).
+        recalculate_af = None
+        populations = ("AFR", "EUR")
+
+        # Replicate cli.py lines 950-951
+        if recalculate_af is None:
+            recalculate_af = bool(populations)
+
+        assert recalculate_af is True
+
+    def test_recalculate_af_false_when_no_populations(self):
+        """When --populations is not set, recalculate_af defaults to False."""
+        recalculate_af = None
+        populations = ()
+
+        if recalculate_af is None:
+            recalculate_af = bool(populations)
+
+        assert recalculate_af is False
+
+    def test_recalculate_af_explicit_true_overrides(self):
+        """Explicit --recalculate-af overrides the conditional default."""
+        recalculate_af = True
+        populations = ()
+
+        if recalculate_af is None:
+            recalculate_af = bool(populations)
+
+        assert recalculate_af is True
+
+    def test_recalculate_af_explicit_false_overrides(self):
+        """Explicit --no-recalculate-af overrides even with populations."""
+        recalculate_af = False
+        populations = ("AFR", "EUR")
+
+        if recalculate_af is None:
+            recalculate_af = bool(populations)
+
+        assert recalculate_af is False

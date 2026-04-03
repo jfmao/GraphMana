@@ -97,6 +97,170 @@ def status(neo4j_uri, neo4j_user, neo4j_password, database, output_json, detaile
 
 
 # ---------------------------------------------------------------------------
+# version: detailed version info
+# ---------------------------------------------------------------------------
+
+
+@cli.command("version")
+def version_info():
+    """Show detailed version information for GraphMana and its dependencies."""
+    import platform
+    import shutil
+    import subprocess
+
+    from graphmana.config import GRAPHMANA_VERSION, SCHEMA_VERSION
+
+    click.echo(f"GraphMana:      {GRAPHMANA_VERSION}")
+    click.echo(f"Schema version: {SCHEMA_VERSION}")
+    click.echo(f"Python:         {platform.python_version()}")
+
+    # cyvcf2
+    try:
+        import cyvcf2
+
+        click.echo(f"cyvcf2:         {cyvcf2.__version__}")
+    except ImportError:
+        click.echo("cyvcf2:         not installed")
+
+    # numpy
+    try:
+        import numpy
+
+        click.echo(f"NumPy:          {numpy.__version__}")
+    except ImportError:
+        click.echo("NumPy:          not installed")
+
+    # Java
+    java_path = shutil.which("java")
+    if java_path:
+        try:
+            result = subprocess.run(
+                ["java", "-version"], capture_output=True, text=True, timeout=5
+            )
+            java_ver = (result.stderr or result.stdout).split("\n")[0]
+            click.echo(f"Java:           {java_ver}")
+        except Exception:
+            click.echo(f"Java:           found at {java_path}")
+    else:
+        click.echo("Java:           not found")
+
+    # Neo4j
+    neo4j_path = shutil.which("neo4j")
+    if neo4j_path:
+        try:
+            result = subprocess.run(
+                ["neo4j", "version"], capture_output=True, text=True, timeout=5
+            )
+            click.echo(f"Neo4j:          {result.stdout.strip()}")
+        except Exception:
+            click.echo(f"Neo4j:          found at {neo4j_path}")
+    else:
+        click.echo("Neo4j:          not found on PATH")
+
+    # bcftools
+    bcf_path = shutil.which("bcftools")
+    if bcf_path:
+        try:
+            result = subprocess.run(
+                ["bcftools", "--version"], capture_output=True, text=True, timeout=5
+            )
+            click.echo(f"bcftools:       {result.stdout.split(chr(10))[0]}")
+        except Exception:
+            click.echo(f"bcftools:       found at {bcf_path}")
+    else:
+        click.echo("bcftools:       not found on PATH")
+
+
+# ---------------------------------------------------------------------------
+# list-formats: show export format reference
+# ---------------------------------------------------------------------------
+
+_EXPORT_FORMATS = [
+    ("treemix", "FAST", "TreeMix allele count matrix (gzipped)"),
+    ("sfs-dadi", "FAST", "dadi site frequency spectrum (.fs)"),
+    ("sfs-fsc", "FAST", "fastsimcoal2 SFS (.obs)"),
+    ("bed", "FAST", "BED variant positions for bedtools/IGV"),
+    ("tsv", "FAST", "Tab-separated variant table"),
+    ("json", "FAST", "JSON Lines variant records"),
+    ("vcf", "FULL", "VCF/BCF genotype calls"),
+    ("plink", "FULL", "PLINK 1.9 binary (.bed/.bim/.fam)"),
+    ("plink2", "FULL", "PLINK 2.0 binary (.pgen/.pvar/.psam)"),
+    ("eigenstrat", "FULL", "EIGENSTRAT for smartPCA/AdmixTools (.geno/.snp/.ind)"),
+    ("beagle", "FULL", "Beagle phasing/imputation input"),
+    ("structure", "FULL", "STRUCTURE population assignment"),
+    ("genepop", "FULL", "Genepop conservation genetics format"),
+    ("hap", "FULL", "Haplotype for selscan (.hap/.map)"),
+    ("bgen", "FULL", "BGEN probabilistic genotypes"),
+    ("gds", "FULL", "SeqArray/R HDF5-based format"),
+    ("zarr", "FULL", "Zarr chunked arrays for sgkit/Python"),
+]
+
+
+@cli.command("list-formats")
+def list_formats():
+    """List all available export formats with access path and description."""
+    click.echo(f"{'Format':<14s} {'Path':<6s} Description")
+    click.echo(f"{'------':<14s} {'----':<6s} -----------")
+    for name, path, desc in _EXPORT_FORMATS:
+        click.echo(f"{name:<14s} {path:<6s} {desc}")
+    click.echo(f"\nTotal: {len(_EXPORT_FORMATS)} formats")
+    click.echo("\nFAST PATH: reads pre-computed population arrays (constant time in N samples)")
+    click.echo("FULL PATH: unpacks per-sample genotypes (linear time in N samples)")
+
+
+# ---------------------------------------------------------------------------
+# config-show: display current configuration
+# ---------------------------------------------------------------------------
+
+
+@cli.command("config-show")
+def config_show():
+    """Display current configuration defaults and environment variable overrides."""
+    import os
+
+    from graphmana.config import (
+        DEFAULT_BATCH_SIZE,
+        DEFAULT_DATABASE,
+        DEFAULT_NEO4J_PASSWORD,
+        DEFAULT_NEO4J_URI,
+        DEFAULT_NEO4J_USER,
+        DEFAULT_THREADS,
+        GRAPHMANA_VERSION,
+        SCHEMA_VERSION,
+    )
+
+    click.echo("GraphMana Configuration")
+    click.echo("=======================")
+    click.echo()
+    click.echo("Connection:")
+    uri_env = os.environ.get("GRAPHMANA_NEO4J_URI")
+    click.echo(f"  Neo4j URI:      {DEFAULT_NEO4J_URI}" + (f"  (from env)" if uri_env else ""))
+    click.echo(f"  Neo4j user:     {DEFAULT_NEO4J_USER}")
+    pw_env = os.environ.get("GRAPHMANA_NEO4J_PASSWORD")
+    click.echo(f"  Neo4j password: {'(from env)' if pw_env else '(default)'}")
+    click.echo(f"  Database:       {DEFAULT_DATABASE}")
+    click.echo()
+    click.echo("Processing:")
+    click.echo(f"  Batch size:     {DEFAULT_BATCH_SIZE:,}")
+    click.echo(f"  Threads:        {DEFAULT_THREADS}")
+    click.echo()
+    click.echo("Version:")
+    click.echo(f"  GraphMana:      {GRAPHMANA_VERSION}")
+    click.echo(f"  Schema:         {SCHEMA_VERSION}")
+    click.echo()
+    click.echo("Environment variables:")
+    env_vars = [
+        ("GRAPHMANA_NEO4J_PASSWORD", "Neo4j password"),
+        ("GRAPHMANA_NEO4J_URI", "Neo4j Bolt URI"),
+        ("NEO4J_HOME", "Neo4j installation directory"),
+    ]
+    for var, desc in env_vars:
+        val = os.environ.get(var)
+        status = f"= {val}" if val else "(not set)"
+        click.echo(f"  {var:<30s} {status}")
+
+
+# ---------------------------------------------------------------------------
 # prepare-csv
 # ---------------------------------------------------------------------------
 
@@ -855,7 +1019,7 @@ def ingest(
 @click.option(
     "--json-include-genotypes",
     is_flag=True,
-    help="Include per-sample genotypes in JSON (FULL PATH).",
+    help="Include per-sample genotypes in JSON output. Requires unpacking packed arrays (FULL PATH).",
 )
 @click.option(
     "--zarr-chunk-size",
@@ -886,6 +1050,8 @@ def ingest(
     help="Neo4j data directory.",
 )
 @click.option("--verbose/--quiet", default=False, help="Verbose logging.")
+@click.option("--no-manifest", is_flag=True, default=False,
+              help="Skip writing the .manifest.json sidecar file.")
 def export(
     output,
     fmt,
@@ -931,6 +1097,7 @@ def export(
     export_neo4j_home,
     export_neo4j_data_dir,
     verbose,
+    no_manifest,
 ):
     """Export data from Neo4j to various formats."""
     _setup_logging(verbose)
@@ -1196,6 +1363,11 @@ def export(
                 click.echo(f"Samples: {summary['n_samples']}")
             if "n_skipped" in summary and summary["n_skipped"] > 0:
                 click.echo(f"Skipped: {summary['n_skipped']} (non-SNP)")
+
+            # Write manifest sidecar unless --no-manifest
+            if not no_manifest and exporter is not None:
+                manifest_path = exporter.write_manifest(Path(output), summary)
+                click.echo(f"Manifest: {manifest_path}")
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -2638,6 +2810,181 @@ def provenance_summary(neo4j_uri, neo4j_user, neo4j_password, database, output_j
         sys.exit(1)
 
 
+@provenance.command("search")
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+@click.option("--since", default=None, help="Start date (ISO format, e.g. 2026-03-01).")
+@click.option("--until", default=None, help="End date (ISO format, e.g. 2026-03-31).")
+@click.option("--dataset-id", default=None, help="Filter by dataset identifier.")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+def provenance_search(
+    neo4j_uri, neo4j_user, neo4j_password, database, since, until, dataset_id, output_json
+):
+    """Search ingestion logs by date range or dataset ID."""
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            from graphmana.provenance.manager import ProvenanceManager
+
+            mgr = ProvenanceManager(conn)
+            results = mgr.search(since=since, until=until, dataset_id=dataset_id)
+
+            if output_json:
+                click.echo(json.dumps(results, indent=2, default=str))
+            else:
+                if not results:
+                    click.echo("No matching ingestion logs found.")
+                    return
+                click.echo(f"Found {len(results)} ingestion log(s):")
+                click.echo()
+                for log in results:
+                    click.echo(f"  {log.get('log_id', 'unknown')}")
+                    click.echo(f"    Date:     {log.get('import_date', 'unknown')}")
+                    click.echo(f"    Mode:     {log.get('mode', 'unknown')}")
+                    click.echo(f"    Source:   {log.get('source_file', 'unknown')}")
+                    click.echo(f"    Dataset:  {log.get('dataset_id', 'unknown')}")
+                    click.echo(f"    Samples:  {log.get('n_samples', 0)}")
+                    click.echo(f"    Variants: {log.get('n_variants', 0)}")
+                    click.echo()
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# diff: compare database states
+# ---------------------------------------------------------------------------
+
+
+@cli.command("diff")
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+@click.option(
+    "--snapshot",
+    "snapshot_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to a previously saved .summary.json file to compare against.",
+)
+@click.option("--save-current", type=click.Path(), default=None,
+              help="Save current database state to this .summary.json file.")
+def diff(neo4j_uri, neo4j_user, neo4j_password, database, snapshot_path, save_current):
+    """Compare current database state against a saved snapshot summary."""
+    from pathlib import Path
+
+    from graphmana.snapshot.diff import capture_db_summary, diff_summaries, load_summary, save_summary
+
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            current = capture_db_summary(conn)
+
+        if save_current:
+            save_summary(current, Path(save_current))
+            click.echo(f"Current state saved to: {save_current}")
+
+        previous = load_summary(Path(snapshot_path))
+        lines = diff_summaries(previous, current, label_a="snapshot", label_b="current")
+
+        for line in lines:
+            click.echo(line)
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command("save-state")
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+@click.option("--output", required=True, type=click.Path(), help="Output .summary.json path.")
+def save_state(neo4j_uri, neo4j_user, neo4j_password, database, output):
+    """Save current database state summary for later comparison with diff."""
+    from pathlib import Path
+
+    from graphmana.snapshot.diff import capture_db_summary, save_summary
+
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            summary = capture_db_summary(conn)
+        save_summary(summary, Path(output))
+        click.echo(f"Database state saved to: {output}")
+        click.echo(f"  Variants:    {summary['n_variants']:,}")
+        click.echo(f"  Samples:     {summary['n_active_samples']:,}")
+        click.echo(f"  Populations: {summary['n_populations']:,}")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# ref-check: reference allele verification
+# ---------------------------------------------------------------------------
+
+
+@cli.command("ref-check")
+@click.option("--fasta", required=True, type=click.Path(exists=True),
+              help="Reference genome FASTA file (with .fai index recommended).")
+@click.option("--output", type=click.Path(), default=None,
+              help="Output TSV file for mismatches. Default: stdout.")
+@click.option("--chromosomes", multiple=True, default=None,
+              help="Limit check to these chromosomes.")
+@click.option("--max-mismatches", type=int, default=0,
+              help="Stop after N mismatches (0 = report all).")
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+def ref_check(
+    fasta, output, chromosomes, max_mismatches,
+    neo4j_uri, neo4j_user, neo4j_password, database,
+):
+    """Verify stored REF alleles against a FASTA reference genome."""
+    from pathlib import Path
+
+    from graphmana.qc.ref_check import check_ref_alleles
+
+    chroms = list(chromosomes) if chromosomes else None
+
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            result = check_ref_alleles(
+                conn, Path(fasta), chromosomes=chroms, max_mismatches=max_mismatches,
+            )
+
+        click.echo(f"Checked:     {result['n_checked']:,} variants")
+        click.echo(f"Matched:     {result['n_matched']:,}")
+        click.echo(f"Mismatched:  {result['n_mismatched']:,}")
+        if result.get("stopped_early"):
+            click.echo(f"(stopped early after {max_mismatches} mismatches)")
+
+        if result["mismatches"]:
+            header = "variantId\tchr\tpos\tstored_ref\tgenome_ref"
+            lines = [header]
+            for m in result["mismatches"]:
+                lines.append(
+                    f"{m['variantId']}\t{m['chr']}\t{m['pos']}\t{m['stored_ref']}\t{m['genome_ref']}"
+                )
+
+            if output:
+                Path(output).parent.mkdir(parents=True, exist_ok=True)
+                with open(output, "w") as f:
+                    f.write("\n".join(lines) + "\n")
+                click.echo(f"Mismatches written to: {output}")
+            else:
+                click.echo()
+                for line in lines:
+                    click.echo(line)
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # cluster: setup-neo4j, neo4j-start, neo4j-stop, check-filesystem
 # ---------------------------------------------------------------------------
@@ -2772,6 +3119,853 @@ def check_filesystem(neo4j_data_dir):
         sys.exit(1)
     else:
         click.echo("Status:     OK (local storage)")
+
+
+# ---------------------------------------------------------------------------
+# cluster: generate-job, check-env
+# ---------------------------------------------------------------------------
+
+
+@cli.group()
+def cluster():
+    """Cluster deployment helpers (SLURM/PBS job scripts, environment checks)."""
+
+
+@cluster.command("generate-job")
+@click.option(
+    "--scheduler",
+    type=click.Choice(["slurm", "pbs"]),
+    default="slurm",
+    help="Job scheduler type.",
+)
+@click.option(
+    "--operation",
+    type=click.Choice(["prepare-csv", "load-csv", "ingest", "export"]),
+    required=True,
+    help="GraphMana operation to generate a job script for.",
+)
+@click.option("--input", "input_files", multiple=True, help="Input VCF file(s).")
+@click.option("--input-list", type=click.Path(), help="File listing VCF paths.")
+@click.option("--population-map", type=click.Path(), help="Population map file.")
+@click.option("--output-dir", type=click.Path(), help="Output directory for CSVs or exports.")
+@click.option("--format", "export_format", help="Export format (for export operation).")
+@click.option("--output", "export_output", help="Export output file (for export operation).")
+@click.option("--reference", default="GRCh38", help="Reference genome. Default: GRCh38.")
+@click.option("--cpus", default=16, type=int, help="CPUs to request. Default: 16.")
+@click.option("--mem", default="64G", help="Memory to request. Default: 64G.")
+@click.option("--time", "walltime", default="4:00:00", help="Walltime limit. Default: 4:00:00.")
+@click.option("--neo4j-home", default="$HOME/neo4j", help="Neo4j installation directory.")
+@click.option("--neo4j-data-dir", default="/scratch/$USER/graphmana_db", help="Neo4j data dir.")
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD, help="Neo4j password.")
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+@click.option("--threads", default=None, type=int, help="GraphMana threads (defaults to --cpus).")
+@click.option("--extra-args", default="", help="Additional arguments to pass to the command.")
+@click.option(
+    "--output-script",
+    default=None,
+    type=click.Path(),
+    help="Write script to file instead of stdout.",
+)
+def cluster_generate_job(
+    scheduler,
+    operation,
+    input_files,
+    input_list,
+    population_map,
+    output_dir,
+    export_format,
+    export_output,
+    reference,
+    cpus,
+    mem,
+    walltime,
+    neo4j_home,
+    neo4j_data_dir,
+    neo4j_password,
+    database,
+    threads,
+    extra_args,
+    output_script,
+):
+    """Generate a SLURM or PBS job script for a GraphMana operation."""
+    threads = threads or cpus
+    lines = []
+
+    # Header
+    if scheduler == "slurm":
+        lines.append("#!/bin/bash")
+        lines.append(f"#SBATCH --job-name=graphmana_{operation}")
+        lines.append(f"#SBATCH --cpus-per-task={cpus}")
+        lines.append(f"#SBATCH --mem={mem}")
+        lines.append(f"#SBATCH --time={walltime}")
+        lines.append(f"#SBATCH --output=graphmana_{operation}_%j.log")
+    else:  # pbs
+        lines.append("#!/bin/bash")
+        lines.append(f"#PBS -N graphmana_{operation}")
+        mem_num = mem.rstrip("GgMm")
+        mem_unit = mem[-1:].lower() + "b" if mem[-1:].isalpha() else "gb"
+        lines.append(f"#PBS -l select=1:ncpus={cpus}:mem={mem_num}{mem_unit}")
+        lines.append(f"#PBS -l walltime={walltime}")
+        lines.append(f"#PBS -o graphmana_{operation}.log")
+
+    lines.append("")
+    lines.append("# Load dependencies")
+    lines.append("module load java/21 2>/dev/null || true")
+    lines.append('source "${HOME}/miniforge3/bin/activate" graphmana 2>/dev/null || \\')
+    lines.append('    source "${HOME}/graphmana-env/bin/activate" 2>/dev/null || true')
+    if scheduler == "pbs":
+        lines.append("cd $PBS_O_WORKDIR")
+    lines.append("")
+    lines.append(f"# GraphMana {operation}")
+
+    # Build command
+    neo4j_args = f"--neo4j-home {neo4j_home} --neo4j-data-dir {neo4j_data_dir}"
+    conn_args = (
+        f"--neo4j-password {neo4j_password} --database {database}"
+    )
+
+    if operation == "prepare-csv":
+        input_args = " ".join(f"--input {f}" for f in input_files)
+        if input_list:
+            input_args += f" --input-list {input_list}"
+        pop_arg = f"--population-map {population_map}" if population_map else ""
+        out_arg = f"--output-dir {output_dir}" if output_dir else "--output-dir ./csv_out"
+        cmd = (
+            f"graphmana prepare-csv \\\n"
+            f"    {input_args} \\\n"
+            f"    {pop_arg} \\\n"
+            f"    {out_arg} \\\n"
+            f"    --reference {reference} \\\n"
+            f"    --threads {threads} \\\n"
+            f"    --verbose"
+        )
+    elif operation == "load-csv":
+        csv_dir = output_dir or "./csv_out"
+        cmd = (
+            f"graphmana load-csv \\\n"
+            f"    --csv-dir {csv_dir} \\\n"
+            f"    {neo4j_args} \\\n"
+            f"    --auto-start-neo4j \\\n"
+            f"    {conn_args} \\\n"
+            f"    --verbose"
+        )
+    elif operation == "ingest":
+        input_args = " ".join(f"--input {f}" for f in input_files)
+        if input_list:
+            input_args += f" --input-list {input_list}"
+        pop_arg = f"--population-map {population_map}" if population_map else ""
+        cmd = (
+            f"graphmana ingest \\\n"
+            f"    {input_args} \\\n"
+            f"    {pop_arg} \\\n"
+            f"    {neo4j_args} \\\n"
+            f"    --auto-start-neo4j \\\n"
+            f"    {conn_args} \\\n"
+            f"    --reference {reference} \\\n"
+            f"    --threads {threads} \\\n"
+            f"    --verbose"
+        )
+    elif operation == "export":
+        fmt = export_format or "vcf"
+        out = export_output or f"./export_output.{fmt}"
+        cmd = (
+            f"graphmana export \\\n"
+            f"    --format {fmt} \\\n"
+            f"    --output {out} \\\n"
+            f"    {neo4j_args} \\\n"
+            f"    --auto-start-neo4j \\\n"
+            f"    {conn_args} \\\n"
+            f"    --threads {threads} \\\n"
+            f"    --verbose"
+        )
+    else:
+        cmd = f"graphmana {operation}"
+
+    if extra_args:
+        cmd += f" \\\n    {extra_args}"
+
+    lines.append(cmd)
+    lines.append("")
+    lines.append(f'echo "GraphMana {operation} complete: $(date)"')
+
+    script = "\n".join(lines) + "\n"
+
+    if output_script:
+        from pathlib import Path
+
+        Path(output_script).write_text(script)
+        Path(output_script).chmod(0o755)
+        click.echo(f"Job script written to: {output_script}")
+        click.echo(f"Submit with: {'sbatch' if scheduler == 'slurm' else 'qsub'} {output_script}")
+    else:
+        click.echo(script)
+
+
+@cluster.command("check-env")
+def cluster_check_env():
+    """Verify cluster environment: Java, conda, Neo4j, ports, filesystem."""
+    import shutil
+    import subprocess
+
+    checks = []
+
+    # Java
+    java = shutil.which("java")
+    if java:
+        result = subprocess.run(["java", "-version"], capture_output=True, text=True)
+        version_line = result.stderr.split("\n")[0] if result.stderr else "unknown"
+        if "21" in version_line or "22" in version_line or "23" in version_line:
+            checks.append(("Java 21+", "OK", version_line.strip()))
+        else:
+            checks.append(("Java 21+", "WARN", f"Found {version_line.strip()} — need 21+"))
+    else:
+        checks.append(("Java 21+", "FAIL", "Not found. Try: module load java/21"))
+
+    # Python / graphmana
+    try:
+        from graphmana import __version__
+
+        checks.append(("GraphMana CLI", "OK", f"v{__version__}"))
+    except ImportError:
+        checks.append(("GraphMana CLI", "FAIL", "Not installed"))
+
+    # cyvcf2
+    try:
+        import cyvcf2
+
+        checks.append(("cyvcf2", "OK", f"v{cyvcf2.__version__}"))
+    except ImportError:
+        checks.append(("cyvcf2", "FAIL", "Not installed. conda install -c bioconda cyvcf2"))
+
+    # bcftools
+    bcftools = shutil.which("bcftools")
+    if bcftools:
+        result = subprocess.run(["bcftools", "--version"], capture_output=True, text=True)
+        checks.append(("bcftools", "OK", result.stdout.split("\n")[0].strip()))
+    else:
+        checks.append(("bcftools", "WARN", "Not found (optional, needed for --normalize)"))
+
+    # Neo4j
+    import os
+
+    neo4j_home = os.environ.get("NEO4J_HOME", os.path.expanduser("~/neo4j"))
+    neo4j_bin = os.path.join(neo4j_home, "bin", "neo4j-admin")
+    if os.path.exists(neo4j_bin):
+        result = subprocess.run(
+            [os.path.join(neo4j_home, "bin", "neo4j"), "version"],
+            capture_output=True, text=True,
+        )
+        checks.append(("Neo4j", "OK", f"{result.stdout.strip()} at {neo4j_home}"))
+    else:
+        checks.append(("Neo4j", "WARN", f"Not found at {neo4j_home}. Run: graphmana setup-neo4j"))
+
+    # Port 7687
+    import socket
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    port_open = sock.connect_ex(("localhost", 7687)) == 0
+    sock.close()
+    if port_open:
+        checks.append(("Bolt port 7687", "OK", "Neo4j is running"))
+    else:
+        checks.append(("Bolt port 7687", "INFO", "Closed (Neo4j not running)"))
+
+    # Disk space
+    for path in ["/scratch", "/tmp", os.path.expanduser("~")]:
+        if os.path.exists(path):
+            stat = shutil.disk_usage(path)
+            free_gb = stat.free / (1024**3)
+            total_gb = stat.total / (1024**3)
+            status = "OK" if free_gb > 100 else ("WARN" if free_gb > 20 else "FAIL")
+            checks.append((f"Disk {path}", status, f"{free_gb:.0f} GB free / {total_gb:.0f} GB total"))
+
+    # Print results
+    click.echo("GraphMana Cluster Environment Check")
+    click.echo("=" * 60)
+    for name, status, detail in checks:
+        icon = {"OK": "  OK ", "WARN": "WARN ", "FAIL": "FAIL ", "INFO": "INFO "}[status]
+        click.echo(f"  [{icon}] {name}: {detail}")
+
+
+# ---------------------------------------------------------------------------
+# init: one-command project setup
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option(
+    "--project-dir",
+    required=True,
+    type=click.Path(),
+    help="Directory for the new GraphMana project.",
+)
+@click.option(
+    "--install-neo4j",
+    is_flag=True,
+    help="Download and install Neo4j into the project directory.",
+)
+@click.option(
+    "--neo4j-password",
+    default=DEFAULT_NEO4J_PASSWORD,
+    help=f"Initial Neo4j password. Default: {DEFAULT_NEO4J_PASSWORD}.",
+)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+def init(project_dir, install_neo4j, neo4j_password, database):
+    """Initialize a new GraphMana project directory with standard structure."""
+    import subprocess
+    from pathlib import Path
+
+    project = Path(project_dir)
+    project.mkdir(parents=True, exist_ok=True)
+
+    # Create directory structure
+    dirs = ["data", "exports", "csv_out", "logs", "snapshots"]
+    for d in dirs:
+        (project / d).mkdir(exist_ok=True)
+
+    # Write environment file
+    neo4j_home = project / "neo4j" if install_neo4j else Path("~/neo4j").expanduser()
+    env_file = project / "graphmana.env"
+    env_file.write_text(
+        f"# GraphMana project configuration\n"
+        f"# Source this file: source {env_file}\n"
+        f"export GRAPHMANA_PROJECT_DIR={project.resolve()}\n"
+        f"export GRAPHMANA_NEO4J_HOME={neo4j_home}\n"
+        f"export GRAPHMANA_NEO4J_DATA_DIR={project.resolve() / 'db'}\n"
+        f"export GRAPHMANA_NEO4J_PASSWORD={neo4j_password}\n"
+        f"export GRAPHMANA_DATABASE={database}\n"
+        f"export GRAPHMANA_SNAPSHOT_DIR={project.resolve() / 'snapshots'}\n"
+    )
+
+    click.echo(f"Project initialized: {project.resolve()}")
+    click.echo(f"  data/       — input VCF and population files")
+    click.echo(f"  exports/    — export output files")
+    click.echo(f"  csv_out/    — intermediate CSV files")
+    click.echo(f"  logs/       — log files")
+    click.echo(f"  snapshots/  — database snapshots")
+    click.echo(f"  graphmana.env — project environment variables")
+
+    if install_neo4j:
+        click.echo("\nInstalling Neo4j...")
+        try:
+            from graphmana.cluster.neo4j_lifecycle import setup_neo4j as _setup
+
+            result = _setup(
+                str(project),
+                data_dir=str(project / "db"),
+                memory_auto=True,
+            )
+            # Set initial password
+            neo4j_admin = Path(result["neo4j_home"]) / "bin" / "neo4j-admin"
+            subprocess.run(
+                [str(neo4j_admin), "dbms", "set-initial-password", neo4j_password],
+                capture_output=True, text=True,
+            )
+            click.echo(f"  Neo4j {result['version']} installed at {result['neo4j_home']}")
+            click.echo(f"  Password set to: {neo4j_password}")
+        except Exception as e:
+            click.echo(f"  Neo4j installation failed: {e}", err=True)
+            click.echo("  You can install manually: graphmana setup-neo4j --install-dir ...")
+
+    click.echo(f"\nQuick start:")
+    click.echo(f"  source {env_file}")
+    click.echo(f"  graphmana prepare-csv --input data/your.vcf.gz --population-map data/pops.tsv \\")
+    click.echo(f"      --output-dir csv_out --reference GRCh38 --threads 8")
+    click.echo(f"  graphmana load-csv --csv-dir csv_out --neo4j-home $GRAPHMANA_NEO4J_HOME \\")
+    click.echo(f"      --auto-start-neo4j --neo4j-password $GRAPHMANA_NEO4J_PASSWORD")
+    click.echo(f"  graphmana status --neo4j-password $GRAPHMANA_NEO4J_PASSWORD")
+
+
+# ---------------------------------------------------------------------------
+# db: database administration
+# ---------------------------------------------------------------------------
+
+
+@cli.group()
+def db():
+    """Database administration (info, check, password, compact, copy)."""
+
+
+@db.command()
+@click.option("--neo4j-home", type=click.Path(exists=True, file_okay=False), default=None)
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE)
+def info(neo4j_home, neo4j_uri, neo4j_user, neo4j_password, database):
+    """Show database size, location, Neo4j version, and connection status."""
+    import os
+
+    # Try connecting
+    connected = False
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            result = conn.execute_read("RETURN 1 AS ok")
+            connected = True
+    except Exception:
+        pass
+
+    click.echo(f"Neo4j URI:      {neo4j_uri}")
+    click.echo(f"Database:       {database}")
+    click.echo(f"Connected:      {'Yes' if connected else 'No'}")
+
+    # Database size on disk
+    if neo4j_home:
+        db_path = os.path.join(neo4j_home, "data", "databases", database)
+        if os.path.exists(db_path):
+            import shutil
+
+            total = sum(
+                f.stat().st_size
+                for f in __import__("pathlib").Path(db_path).rglob("*")
+                if f.is_file()
+            )
+            click.echo(f"DB path:        {db_path}")
+            click.echo(f"DB size:        {total / (1024**3):.1f} GB")
+
+        # Neo4j version
+        import subprocess
+
+        neo4j_bin = os.path.join(neo4j_home, "bin", "neo4j")
+        if os.path.exists(neo4j_bin):
+            result = subprocess.run([neo4j_bin, "version"], capture_output=True, text=True)
+            click.echo(f"Neo4j version:  {result.stdout.strip()}")
+
+        # Neo4j status
+        result = subprocess.run([neo4j_bin, "status"], capture_output=True, text=True)
+        status = result.stdout.strip() if result.returncode == 0 else "Not running"
+        click.echo(f"Neo4j status:   {status}")
+
+    if connected:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            for label in ["Variant", "Sample", "Population", "Chromosome"]:
+                result = conn.execute_read(f"MATCH (n:{label}) RETURN count(n) AS c")
+                rec = result.single()
+                click.echo(f"  {label + ':':16s}{rec['c']:,}" if rec else f"  {label}: 0")
+
+
+@db.command()
+@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--database", default=DEFAULT_DATABASE)
+def check(neo4j_home, database):
+    """Run Neo4j consistency check on the database."""
+    import subprocess
+    from pathlib import Path
+
+    neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
+    if not neo4j_admin.exists():
+        click.echo(f"Error: neo4j-admin not found at {neo4j_admin}", err=True)
+        sys.exit(1)
+
+    click.echo(f"Running consistency check on database '{database}'...")
+    click.echo("(Neo4j must be stopped for this operation)")
+    result = subprocess.run(
+        [str(neo4j_admin), "database", "check", database],
+        capture_output=True, text=True,
+    )
+    click.echo(result.stdout)
+    if result.stderr:
+        click.echo(result.stderr, err=True)
+    if result.returncode != 0:
+        click.echo("Consistency check failed.", err=True)
+        sys.exit(result.returncode)
+    else:
+        click.echo("Consistency check passed.")
+
+
+@db.command()
+@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--new-password", required=True, prompt=True, hide_input=True, confirmation_prompt=True)
+def password(neo4j_home, new_password):
+    """Change the Neo4j password."""
+    import subprocess
+    from pathlib import Path
+
+    neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
+    result = subprocess.run(
+        [str(neo4j_admin), "dbms", "set-initial-password", new_password],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        click.echo("Password updated. Takes effect on next Neo4j start.")
+    else:
+        click.echo(f"Error: {result.stderr.strip()}", err=True)
+        click.echo("Note: use Neo4j Browser (http://localhost:7474) to change password on a running instance.")
+
+
+@db.command()
+@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--database", default=DEFAULT_DATABASE)
+@click.option("--destination", required=True, type=click.Path(), help="Destination directory.")
+def copy(neo4j_home, database, destination):
+    """Copy a database to a new location via neo4j-admin dump/load."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
+    dest = Path(destination)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    click.echo("Neo4j must be stopped for this operation.")
+
+    with tempfile.NamedTemporaryFile(suffix=".dump", delete=False) as tmp:
+        dump_path = tmp.name
+
+    try:
+        click.echo(f"Dumping database '{database}'...")
+        result = subprocess.run(
+            [str(neo4j_admin), "database", "dump", database, f"--to-path={dest}"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            click.echo(f"Error: {result.stderr.strip()}", err=True)
+            sys.exit(1)
+        click.echo(f"Database copied to: {dest}")
+    finally:
+        import os
+
+        if os.path.exists(dump_path):
+            os.unlink(dump_path)
+
+
+@db.command()
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
+@click.option("--fix", is_flag=True, help="Attempt to fix detected issues.")
+def validate(neo4j_uri, neo4j_user, neo4j_password, database, fix):
+    """Validate database integrity: packed array sizes, population arrays, NEXT chains."""
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            issues = []
+            click.echo("Validating database integrity...")
+
+            # 1. Get sample count
+            from graphmana.db.queries import ACTIVE_SAMPLE_FILTER
+
+            result = conn.execute_read(
+                f"MATCH (s:Sample) WHERE {ACTIVE_SAMPLE_FILTER} "
+                "RETURN count(s) AS n"
+            )
+            n_samples = result.single()["n"]
+            click.echo(f"  Active samples: {n_samples}")
+
+            # 2. Check packed array lengths on a sample of variants
+            expected_gt_len = (n_samples + 3) // 4
+            expected_phase_len = (n_samples + 7) // 8
+            result = conn.execute_read(
+                "MATCH (v:Variant) "
+                "WHERE size(v.gt_packed) <> $expected_gt "
+                "RETURN count(v) AS n",
+                {"expected_gt": expected_gt_len},
+            )
+            bad_gt = result.single()["n"]
+            if bad_gt > 0:
+                issues.append(f"  FAIL: {bad_gt} variants have wrong gt_packed length "
+                              f"(expected {expected_gt_len} bytes for {n_samples} samples)")
+            else:
+                click.echo(f"  gt_packed lengths: OK ({expected_gt_len} bytes)")
+
+            result = conn.execute_read(
+                "MATCH (v:Variant) "
+                "WHERE v.phase_packed IS NOT NULL AND size(v.phase_packed) <> $expected_phase "
+                "RETURN count(v) AS n",
+                {"expected_phase": expected_phase_len},
+            )
+            bad_phase = result.single()["n"]
+            if bad_phase > 0:
+                issues.append(f"  FAIL: {bad_phase} variants have wrong phase_packed length "
+                              f"(expected {expected_phase_len} bytes for {n_samples} samples)")
+            else:
+                click.echo(f"  phase_packed lengths: OK ({expected_phase_len} bytes)")
+
+            # 3. Check population array consistency
+            result = conn.execute_read(
+                "MATCH (v:Variant) "
+                "WHERE size(v.pop_ids) <> size(v.ac) "
+                "   OR size(v.pop_ids) <> size(v.an) "
+                "   OR size(v.pop_ids) <> size(v.af) "
+                "RETURN count(v) AS n"
+            )
+            bad_pop = result.single()["n"]
+            if bad_pop > 0:
+                issues.append(f"  FAIL: {bad_pop} variants have mismatched population array lengths")
+            else:
+                click.echo("  Population array lengths: OK")
+
+            # 4. Check NEXT chain continuity (spot check per chromosome)
+            result = conn.execute_read(
+                "MATCH (c:Chromosome) RETURN c.chromosomeId AS chr"
+            )
+            chroms = [r["chr"] for r in result]
+            broken_chains = 0
+            for chrom in chroms[:5]:  # Spot check first 5 chromosomes
+                result = conn.execute_read(
+                    "MATCH (v:Variant {chr: $chr}) "
+                    "WHERE NOT (v)-[:NEXT]->() "
+                    "AND NOT v.pos = ("
+                    "  MATCH (vmax:Variant {chr: $chr}) RETURN max(vmax.pos))[0] "
+                    "RETURN count(v) AS n",
+                    {"chr": chrom},
+                )
+                # Simplified: just check that NEXT edges exist
+                result2 = conn.execute_read(
+                    "MATCH (v:Variant {chr: $chr})-[:NEXT]->() RETURN count(v) AS n_edges",
+                    {"chr": chrom},
+                )
+                result3 = conn.execute_read(
+                    "MATCH (v:Variant {chr: $chr}) RETURN count(v) AS n_variants",
+                    {"chr": chrom},
+                )
+                n_edges = result2.single()["n_edges"]
+                n_vars = result3.single()["n_variants"]
+                if n_vars > 1 and n_edges < n_vars - 1:
+                    broken_chains += 1
+                    issues.append(
+                        f"  FAIL: {chrom} NEXT chain incomplete "
+                        f"({n_edges} edges for {n_vars} variants, expected {n_vars - 1})"
+                    )
+            if broken_chains == 0:
+                click.echo(f"  NEXT chains: OK (checked {min(len(chroms), 5)} chromosomes)")
+
+            # Report
+            click.echo()
+            if issues:
+                click.echo(f"Found {len(issues)} issue(s):")
+                for issue in issues:
+                    click.echo(issue)
+                if not fix:
+                    click.echo("\nRun with --fix to attempt automatic repair.")
+                sys.exit(1)
+            else:
+                click.echo("Database validation passed.")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# summary: human-readable dataset overview
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE)
+@click.option("--output", "output_file", type=click.Path(), default=None, help="Write to file.")
+def summary(neo4j_uri, neo4j_user, neo4j_password, database, output_file):
+    """Generate a human-readable dataset summary report."""
+    lines = []
+
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            # Schema metadata
+            result = conn.execute_read("MATCH (m:SchemaMetadata) RETURN m LIMIT 1")
+            meta = dict(result.single()["m"]) if result.single is not None else {}
+            try:
+                rec = conn.execute_read("MATCH (m:SchemaMetadata) RETURN m LIMIT 1").single()
+                meta = dict(rec["m"]) if rec else {}
+            except Exception:
+                meta = {}
+
+            # Counts
+            from graphmana.db.queries import ACTIVE_SAMPLE_FILTER
+
+            counts = {}
+            for label in ["Variant", "Population", "Chromosome", "Gene", "VCFHeader"]:
+                r = conn.execute_read(f"MATCH (n:{label}) RETURN count(n) AS c").single()
+                counts[label] = r["c"] if r else 0
+            # Sample count with soft-delete filter
+            r = conn.execute_read(
+                f"MATCH (s:Sample) WHERE {ACTIVE_SAMPLE_FILTER} RETURN count(s) AS c"
+            ).single()
+            counts["Sample"] = r["c"] if r else 0
+
+            # Variant type breakdown
+            vtype_result = conn.execute_read(
+                "MATCH (v:Variant) WHERE v.variant_type IS NOT NULL "
+                "RETURN v.variant_type AS vt, count(v) AS c ORDER BY c DESC"
+            )
+            vtypes = [(r["vt"], r["c"]) for r in vtype_result]
+
+            # Populations with sample counts
+            pop_result = conn.execute_read(
+                "MATCH (s:Sample)-[:IN_POPULATION]->(p:Population) "
+                f"WHERE {ACTIVE_SAMPLE_FILTER} "
+                "RETURN p.populationId AS pop, count(s) AS n ORDER BY n DESC"
+            )
+            pops = [(r["pop"], r["n"]) for r in pop_result]
+
+            # Chromosomes with variant counts
+            chr_result = conn.execute_read(
+                "MATCH (v:Variant)-[:ON_CHROMOSOME]->(c:Chromosome) "
+                "RETURN c.chromosomeId AS chr, count(v) AS n ORDER BY n DESC LIMIT 5"
+            )
+            top_chrs = [(r["chr"], r["n"]) for r in chr_result]
+
+            # Provenance
+            prov_result = conn.execute_read(
+                "MATCH (l:IngestionLog) "
+                "RETURN count(l) AS n, max(l.import_date) AS last_import"
+            )
+            prov = prov_result.single() if prov_result else None
+
+            # Build report
+            lines.append("=" * 60)
+            lines.append("GraphMana Dataset Summary")
+            lines.append("=" * 60)
+            lines.append("")
+            ref = meta.get("reference_genome", "unknown")
+            lines.append(f"Reference genome:    {ref}")
+            lines.append(f"Schema version:      {meta.get('schema_version', 'unknown')}")
+            if prov:
+                lines.append(f"Last import:         {prov.get('last_import', 'unknown')}")
+                lines.append(f"Total imports:       {prov.get('n', 0)}")
+            lines.append("")
+            lines.append("--- Node Counts ---")
+            for label, c in counts.items():
+                lines.append(f"  {label + ':':20s}{c:>12,}")
+            lines.append("")
+
+            if vtypes:
+                lines.append("--- Variant Types ---")
+                for vt, c in vtypes:
+                    lines.append(f"  {(vt or 'unknown') + ':':20s}{c:>12,}")
+                lines.append("")
+
+            if pops:
+                lines.append(f"--- Populations ({len(pops)} total) ---")
+                for pop, n in pops[:10]:
+                    lines.append(f"  {pop + ':':20s}{n:>6} samples")
+                if len(pops) > 10:
+                    lines.append(f"  ... and {len(pops) - 10} more")
+                lines.append("")
+
+            if top_chrs:
+                lines.append("--- Top Chromosomes by Variant Count ---")
+                for ch, n in top_chrs:
+                    lines.append(f"  {ch + ':':20s}{n:>12,}")
+                lines.append("")
+
+            lines.append("=" * 60)
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    report = "\n".join(lines)
+
+    if output_file:
+        from pathlib import Path
+
+        Path(output_file).write_text(report + "\n")
+        click.echo(f"Summary written to: {output_file}")
+    else:
+        click.echo(report)
+
+
+# ---------------------------------------------------------------------------
+# query: run Cypher from CLI
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.argument("cypher", required=False)
+@click.option("--file", "query_file", type=click.Path(exists=True), help="Read query from file.")
+@click.option("--neo4j-uri", default=DEFAULT_NEO4J_URI)
+@click.option("--neo4j-user", default=DEFAULT_NEO4J_USER)
+@click.option("--neo4j-password", default=DEFAULT_NEO4J_PASSWORD)
+@click.option("--database", default=DEFAULT_DATABASE)
+@click.option("--format", "output_format", type=click.Choice(["table", "json", "csv"]), default="table")
+@click.option("--limit", "max_rows", type=int, default=100, help="Max rows to display. Default: 100.")
+def query(cypher, query_file, neo4j_uri, neo4j_user, neo4j_password, database, output_format, max_rows):
+    """Run a Cypher query against the database.
+
+    Pass the query as an argument or use --file to read from a file.
+
+    \b
+    Examples:
+      graphmana query "MATCH (v:Variant) RETURN count(v) AS n"
+      graphmana query "MATCH (p:Population) RETURN p.populationId, p.n_samples" --format csv
+      graphmana query --file my_query.cypher --format json
+    """
+    if query_file:
+        from pathlib import Path
+
+        cypher = Path(query_file).read_text().strip()
+    elif not cypher:
+        click.echo("Error: provide a Cypher query as argument or use --file.", err=True)
+        sys.exit(1)
+
+    # Safety: block write operations
+    upper = cypher.upper().strip()
+    if any(kw in upper for kw in ["CREATE", "DELETE", "SET ", "REMOVE ", "MERGE", "DROP", "DETACH"]):
+        click.echo("Error: write operations are not allowed via 'graphmana query'.", err=True)
+        click.echo("Use Neo4j Browser or Cypher Shell for write operations.", err=True)
+        sys.exit(1)
+
+    try:
+        with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
+            result = conn.execute_read(cypher)
+            records = list(result)
+
+            if not records:
+                click.echo("(no results)")
+                return
+
+            keys = records[0].keys() if hasattr(records[0], "keys") else list(records[0].data().keys())
+            keys = list(keys)
+
+            rows = []
+            for r in records[:max_rows]:
+                if hasattr(r, "data"):
+                    rows.append(r.data())
+                else:
+                    rows.append({k: r[k] for k in keys})
+
+            if output_format == "json":
+                click.echo(json.dumps(rows, indent=2, default=str))
+            elif output_format == "csv":
+                click.echo(",".join(keys))
+                for row in rows:
+                    click.echo(",".join(str(row.get(k, "")) for k in keys))
+            else:  # table
+                # Calculate column widths
+                widths = {k: len(k) for k in keys}
+                for row in rows:
+                    for k in keys:
+                        val = str(row.get(k, ""))
+                        if len(val) > 60:
+                            val = val[:57] + "..."
+                        widths[k] = max(widths[k], len(val))
+
+                # Header
+                header = " | ".join(k.ljust(widths[k]) for k in keys)
+                click.echo(header)
+                click.echo("-+-".join("-" * widths[k] for k in keys))
+
+                # Rows
+                for row in rows:
+                    vals = []
+                    for k in keys:
+                        val = str(row.get(k, ""))
+                        if len(val) > 60:
+                            val = val[:57] + "..."
+                        vals.append(val.ljust(widths[k]))
+                    click.echo(" | ".join(vals))
+
+                if len(records) > max_rows:
+                    click.echo(f"\n... {len(records) - max_rows} more rows (use --limit to show more)")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

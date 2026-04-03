@@ -35,142 +35,120 @@ Place this content in: `docs/neo4j-primer.md` + link from README "Prerequisites"
 
 ---
 
-## Export Performance Benchmark — 1KGP Full Scale (ACTIVE PLAN)
+## Export Performance Benchmark — 1KGP Full Scale (COMPLETE)
 
-_Added: 2026-03-20_
+_Added: 2026-03-20. Completed: 2026-03-29._
 
-### ⚠️ CRITICAL DATABASE CONTEXT NOTE
-**This benchmark uses the GraphPop production database, NOT a GraphMana-ingested database.**
-All follow-up analysis and paper figures must note this explicitly.
+### Database Context
+**GraphMana-native database** — imported via `graphmana prepare-csv` + `graphmana load-csv`.
 
 | Property | Value |
 |----------|-------|
-| Database | GraphPop 1KGP whole-genome production DB |
+| Database | GraphMana-native 1KGP whole-genome |
 | URI | `bolt://localhost:7687` |
-| Credentials | `neo4j` / `graphpop` |
-| Variants | 70,691,875 (61.6M SNPs, 9.0M INDELs, 97.7K SVs) |
+| Credentials | `neo4j` / `graphmana` |
+| Variants | 70,691,875 |
 | Samples | 3,202 |
 | Populations | 26 (all 1KGP populations) |
 | Chromosomes | 22 (all autosomes, chr1–chr22) |
 | chr22 variants | 1,066,557 |
-| Schema diffs vs GraphMana | No SchemaMetadata, no VCFHeader, no Sample.excluded; chromosomeId="chr1" format; Sample.sex is int (1/2) |
+| Database size | 166 GB |
+| Neo4j config | heap=16g, pagecache=16g |
+| Hardware | 32 cores, 62 GB RAM, NVMe SSD |
 
-Schema is **compatible** with all GraphMana exporters:
-- `gt_packed`, `phase_packed`, `pop_ids`, `ac`, `an`, `af` all present on Variant nodes ✓
-- `Sample.packed_index` (0-indexed, 3202 entries) ✓
-- `ON_CHROMOSOME`, `IN_POPULATION`, `HAS_CONSEQUENCE` relationships ✓
-- `Sample.excluded = NULL` → treated as not excluded by active sample filter ✓
-- VCF export will produce generic header (no VCFHeader node) — acceptable for benchmark ✓
+### Import Pipeline Timing
 
----
-
-### Phase 1: FAST PATH Benchmarks (all 22 chromosomes, all populations)
-_Goal: Demonstrate constant-time exports independent of sample count_
-_Connection flags for all runs: `--neo4j-uri bolt://localhost:7687 --neo4j-user neo4j --neo4j-password graphpop`_
-
-- [ ] **TreeMix** — all chr, all 26 pops → measure wall time + output file size
-  ```
-  graphmana export --format treemix --output results/bench/treemix_1kgp_all.treemix.gz \
-    --neo4j-password graphpop
-  ```
-- [ ] **SFS dadi (3-pop AFR/EUR/EAS)** — YRI, CEU, CHB; folded + unfolded
-  ```
-  graphmana export --format sfs-dadi --output results/bench/sfs_dadi_3pop.fs \
-    --sfs-populations YRI --sfs-populations CEU --sfs-populations CHB \
-    --sfs-folded --neo4j-password graphpop
-  ```
-- [ ] **SFS dadi (5-superpop proxy)** — YRI, CEU, CHB, GIH, MXL
-  ```
-  graphmana export --format sfs-dadi --output results/bench/sfs_dadi_5pop.fs \
-    --sfs-populations YRI --sfs-populations CEU --sfs-populations CHB \
-    --sfs-populations GIH --sfs-populations MXL \
-    --sfs-folded --neo4j-password graphpop
-  ```
-- [ ] **SFS fastsimcoal2 (3-pop)** — YRI, CEU, CHB
-  ```
-  graphmana export --format sfs-fsc --output results/bench/sfs_fsc_3pop \
-    --sfs-populations YRI --sfs-populations CEU --sfs-populations CHB \
-    --neo4j-password graphpop
-  ```
-- [ ] **BED** — all variants (variant positions only)
-  ```
-  graphmana export --format bed --output results/bench/1kgp_all.bed \
-    --neo4j-password graphpop
-  ```
-- [ ] **TSV (allele frequencies)** — all variants
-  ```
-  graphmana export --format tsv --output results/bench/1kgp_af.tsv \
-    --tsv-columns variantId --tsv-columns chr --tsv-columns pos \
-    --tsv-columns ref --tsv-columns alt --tsv-columns af_total \
-    --tsv-columns ac_total --tsv-columns an_total \
-    --neo4j-password graphpop
-  ```
-
-Record for each: wall time (time command), output file size, n_variants exported.
+| Step | Time |
+|------|------|
+| `prepare-csv` (22 VCFs, 16 threads) | ~2 hours |
+| `neo4j-admin import` (221 GB CSVs) | ~3 minutes |
+| Post-import indexes | seconds |
 
 ---
 
-### Phase 2: FULL PATH Benchmarks (chr22 only, ~1.07M variants × 3,202 samples)
-_Goal: Demonstrate linear-scaling exports with per-sample genotype unpacking_
+### Phase 1: FAST PATH Benchmarks (all 22 chromosomes) — COMPLETE
 
-- [ ] **VCF (chr22)**
-  ```
-  graphmana export --format vcf --output results/bench/1kgp_chr22.vcf.gz \
-    --output-type z --filter-chr chr22 --neo4j-password graphpop
-  ```
-- [ ] **PLINK 1.9 (chr22, SNPs only)**
-  ```
-  graphmana export --format plink --output results/bench/1kgp_chr22_plink \
-    --filter-chr chr22 --filter-variant-type SNP --neo4j-password graphpop
-  ```
-- [ ] **EIGENSTRAT (chr22)**
-  ```
-  graphmana export --format eigenstrat --output results/bench/1kgp_chr22_eigenstrat \
-    --filter-chr chr22 --neo4j-password graphpop
-  ```
-- [ ] **TreeMix (chr22 only)** — for direct FAST vs FULL comparison on same data
-  ```
-  graphmana export --format treemix --output results/bench/treemix_1kgp_chr22.treemix.gz \
-    --filter-chr chr22 --neo4j-password graphpop
-  ```
+| Format | Variants | Wall time | File size |
+|--------|----------|-----------|-----------|
+| TreeMix (26 pops) | 70,692,015 | **102 min** | 780 MB |
+| SFS dadi (2-pop folded) | 70,692,015 | **98 min** | 5.7 KB |
+| SFS fsc (2-pop folded) | 70,692,015 | **101 min** | 1.3 KB |
+| BED | 70,692,007 | **103 min** | 2.9 GB |
+| TSV (8 AF columns) | 70,692,007 | **101 min** | 3.8 GB |
 
-Record: wall time, file size, n_variants, n_samples in output.
+### Phase 2: FULL PATH Benchmarks (chr22) — COMPLETE
 
----
+| Format | Variants | Wall time | File size |
+|--------|----------|-----------|-----------|
+| VCF (BGZF) | 1,035,839 | **649s** (10.8 min) | 208 MB |
+| PLINK 1.9 (SNPs) | 439,609 | **22s** | 336 MB |
+| EIGENSTRAT | 925,730 | **192s** (3.2 min) | 2.8 GB |
+| TreeMix chr22 | 1,066,557 | **131s** | 12 MB |
 
-### Phase 3: Parallel Scaling (chr22, --threads 1 vs 4 vs 8)
-_Goal: Demonstrate parallel export speedup and output identity_
+### Phase 3: Parallel Scaling (chr22) — COMPLETE
 
-- [ ] VCF chr22 with `--threads 1`, `--threads 4`, `--threads 8`
-- [ ] PLINK chr22 same thread counts
-- [ ] Verify `--threads 1` and `--threads 8` outputs are identical (sort, diff)
-- [ ] Plot speedup curve
+| Format | Threads | Wall time | Speedup |
+|--------|---------|-----------|---------|
+| VCF | 1 | 648s | 1.0x |
+| VCF | 4 | 645s | 1.0x |
+| VCF | 8 | 647s | 1.0x |
+| PLINK | 1 | 218s | 1.0x |
+| PLINK | 4 | 145s | 1.5x |
+| PLINK | 8 | 22s | 9.9x |
 
----
+- [x] VCF chr22 with --threads 1, 4, 8 — no speedup on single chromosome (expected)
+- [x] PLINK chr22 with --threads 1, 4, 8 — 10x speedup at 8 threads
+- [x] Output identity verified: VCF t1 vs t8 IDENTICAL (1,035,839 lines), PLINK .bed/.bim IDENTICAL
 
-### Phase 4: Whole-Genome FULL PATH (if time permits)
-_Optional — extrapolate from chr22 timing × 22 chromosomes_
+### Phase 4: Whole-Genome FULL PATH (8 threads) — COMPLETE
 
-- [ ] VCF all chromosomes — estimated time based on chr22 × 22
-- [ ] PLINK all chromosomes
-- [ ] If feasible, run EIGENSTRAT all chromosomes
+| Format | Variants | Samples | Wall time | File size |
+|--------|----------|---------|-----------|-----------|
+| PLINK 1.9 (SNPs) | 9,627,636 | 3,202 | **156s** (2.6 min) | 7.2 GB |
+| EIGENSTRAT | 61,599,149 | 3,202 | **13,351s** (3.7 hr) | 184 GB |
+| VCF (BGZF) | 68,912,619 | 3,202 | **13,294s** (3.7 hr) | 14 GB |
 
----
+### Phase 5: Results Table (publication-ready) — COMPLETE
 
-### Phase 5: Results Table (publication-ready)
-_Target: Table 2 or Figure 3 in the Nature Methods paper_
+| Format | Path | Scope | Variants | Samples | Pops | Wall time | File size |
+|--------|------|-------|----------|---------|------|-----------|-----------|
+| TreeMix | FAST | All (22) | 70.7M | 3,202 | 26 | 102 min | 780 MB |
+| SFS dadi | FAST | All (22) | 70.7M | — | 2 | 98 min | 5.7 KB |
+| SFS fsc | FAST | All (22) | 70.7M | — | 2 | 101 min | 1.3 KB |
+| BED | FAST | All (22) | 70.7M | — | — | 103 min | 2.9 GB |
+| TSV (AF) | FAST | All (22) | 70.7M | — | — | 101 min | 3.8 GB |
+| TreeMix | FAST | chr22 | 1.07M | — | 26 | 131s | 12 MB |
+| VCF | FULL | chr22 | 1.04M | 3,202 | — | 649s | 208 MB |
+| PLINK 1.9 | FULL | chr22 | 440K SNP | 3,202 | — | 22s | 336 MB |
+| EIGENSTRAT | FULL | chr22 | 926K | 3,202 | — | 192s | 2.8 GB |
+| **PLINK 1.9** | **FULL** | **All (22)** | **9.6M SNP** | **3,202** | **—** | **156s** | **7.2 GB** |
+| **EIGENSTRAT** | **FULL** | **All (22)** | **61.6M** | **3,202** | **—** | **3.7 hr** | **184 GB** |
+| **VCF (BGZF)** | **FULL** | **All (22)** | **68.9M** | **3,202** | **—** | **3.7 hr** | **14 GB** |
 
-| Format | Path | Chr scope | Variants | Samples | Pops | Wall time | File size |
-|--------|------|-----------|----------|---------|------|-----------|-----------|
-| TreeMix | FAST | All (22) | 70.7M | 3,202 | 26 | TBD | TBD |
-| SFS dadi | FAST | All (22) | 70.7M | — | 3 | TBD | TBD |
-| SFS fsc | FAST | All (22) | 70.7M | — | 3 | TBD | TBD |
-| BED | FAST | All (22) | 70.7M | — | — | TBD | TBD |
-| TSV (AF) | FAST | All (22) | 70.7M | — | — | TBD | TBD |
-| TreeMix | FAST | chr22 | 1.07M | — | 26 | TBD | TBD |
-| VCF | FULL | chr22 | 1.07M | 3,202 | — | TBD | TBD |
-| PLINK 1.9 | FULL | chr22 | ~1.0M SNP | 3,202 | — | TBD | TBD |
-| EIGENSTRAT | FULL | chr22 | 1.07M | 3,202 | — | TBD | TBD |
+### Key Optimizations Implemented During Benchmarking
+
+1. **Smart variant queries**: Three query strategies (FAST unordered, FAST batched, GENOTYPES batched) selected automatically based on export needs
+2. **Batched pagination**: 500K variants per batch avoids Neo4j GC pauses on large chromosomes
+3. **Streaming SFS**: Accumulate SFS bins directly instead of collecting all variant dicts
+4. **BGZF VCF export**: Proper blocked gzip output readable by bcftools/htslib
+5. **Property-selected queries**: FAST PATH excludes gt_packed/phase_packed (~5× less data per variant)
+
+### Validation Tests (for paper)
+
+**VCF Roundtrip Fidelity** (2026-03-30):
+- Imported 1KGP chr22 → exported with `--phased` → compared with original using bcftools
+- Position-matched biallelic SNP comparison: 897,645 variants, 5 samples
+- Results: HG00096 99.9992%, HG00097 99.9997%, NA18525 100.0000%, NA19238 99.9991%, HG01879 99.9995%
+- The 2-8 mismatches per sample are at multi-allelic positions (test artifact from position-based join, not real errors)
+- Multi-allelic reconstruction: 1,066,557 biallelic records → 1,035,839 records (24,006 multi-allelic lines)
+
+**Incremental Import** (2026-03-30):
+- Tested adding 10 new samples (chr22) to the existing 3,202-sample whole-genome database
+- Neo4j crashed under write pressure (~20 min into extending 1.07M variant packed arrays)
+- Database integrity preserved — transactions rolled back cleanly, no corruption
+- Root cause: whole-genome incremental import requires updating millions of packed arrays in write transactions; exceeds available memory on 64 GB machine with heap=16g + pagecache=16g
+- Recommendation: incremental import works well for per-chromosome and exome-scale databases; whole-genome incremental requires 128+ GB RAM
+- Integration tests (chr22-only database) pass 28/28 for incremental import
 
 ---
 
@@ -448,6 +426,290 @@ _Single comprehensive Nature Methods paper describing the fully mature GraphMana
 9. If all 10 pass → mark full genome integration as fully confirmed
 
 **Remaining for v1.0 publication release:**
-10. Publication-quality benchmarks (timing/scaling figures for the paper)
+10. ~~Publication-quality benchmarks (timing/scaling figures for the paper)~~ — DONE (2026-03-27 to 2026-03-29)
 11. Version tags: v0.1.0, v0.5.0, v0.9.0, v1.0.0
 12. Nature Methods manuscript
+
+---
+
+### 2026-03-27 to 2026-03-30 — Major development session (Ubuntu migration + benchmarks)
+
+**Environment setup:**
+- Reformatted Windows/WSL → pure Ubuntu 24.04
+- Installed Java 21, Maven, bcftools, Git, Miniforge, Neo4j 5.26.0
+- Fixed 55 symlinks (`/mnt/workspace` → `/mnt/data`) + 6 source files
+- Created conda env `graphmana` (Python 3.12, cyvcf2 0.32.1)
+- 1230 unit tests passing
+
+**Database creation:**
+- Full GraphMana-native 1KGP import: 70.7M variants, 3,202 samples, 22 chromosomes
+- prepare-csv: 2 hours (16 threads) → 221 GB CSVs
+- neo4j-admin import: 3 minutes → 166 GB database
+
+**Bugs fixed:**
+- BGZF VCF export (`--output-type z`): implemented BGZFWriter with proper EOF marker
+- OOM on all-chromosome exports: property-selected FAST PATH queries (5x less data)
+- GC pause timeouts: unordered queries for aggregation exports
+- Batched pagination: 500K variants per batch for ordered queries
+- SFS memory accumulation: streaming into SFS array directly (both dadi + fsc)
+- SFS fsc 0 variants: missing `--sfs-folded` flag (not a code bug)
+
+**New CLI commands (9 new, 31 total):**
+- `graphmana init` — one-command project setup
+- `graphmana cluster generate-job` — SLURM/PBS script generation
+- `graphmana cluster check-env` — environment verification
+- `graphmana db info/check/password/copy` — database administration
+- `graphmana summary` — human-readable dataset report
+- `graphmana query` — Cypher from CLI (read-only)
+
+**Architecture improvement:**
+- Unified `_iter_variants()` with `need_genotypes` / `need_order` parameters
+- Three query tiers: FAST (pop arrays), GENOTYPES (packed arrays), FULL (legacy)
+- Auto-selected batched pagination for large chromosomes
+
+**Documentation:**
+- 58 command reference pages (auto-generated from CLI --help)
+- 11 vignettes (quickstart, 1KGP import, export formats, cohorts, annotation, sample lifecycle, liftover, HPC cluster, Jupyter API, database admin, variant representation)
+- Expanded docs/cluster.md with resource estimation, end-to-end workflow, troubleshooting
+
+**Benchmark results (all phases complete):**
+- Phase 1: FAST PATH all-chr — TreeMix 102min, SFS dadi 98min, BED 103min, TSV 101min
+- Phase 2: FULL PATH chr22 — VCF 649s, PLINK 22s, EIGENSTRAT 192s
+- Phase 3: Parallel scaling — PLINK 10x speedup at 8 threads
+- Phase 4: FULL PATH all-chr — PLINK 156s, EIGENSTRAT 3.7hr, VCF 3.7hr
+
+**Validation:**
+- VCF roundtrip: 99.999%+ concordance (897,645 biallelic SNPs, 5 samples)
+- Incremental import: works for per-chromosome; whole-genome exceeds 64GB (documented)
+
+**Git:** Initial commit created (247 files, 45,057 lines). GitHub repo pending PAT setup.
+
+---
+
+## Comprehensive Benchmark Strategy (Nature Methods)
+
+_Added: 2026-03-30. Updated: 2026-03-31. Status: Complete._
+
+### General Strategy
+
+**Primary dataset**: 1KGP chr22 (1.07M variants, 3,202 samples, 26 populations).
+Chr22 is used for the full benchmark matrix — large enough to be meaningful, small
+enough to complete the entire GraphMana vs bcftools comparison in 2-3 hours.
+
+**Whole-genome data points**: Add selectively for key demonstrations (initial import
+timing, FAST PATH export scaling) to show that results generalize. Not used for
+the full apples-to-apples comparison — that would take days.
+
+**Comparison target**: bcftools only (no PLINK). bcftools is the stronger tool;
+comparing against it avoids cherry-picking.
+
+**Sample split**: base 2,500 + 3 batches of 234 = 3,202 total. Deterministic seed=42.
+
+### Five Benchmarks
+
+1. **Incremental Addition** — GraphMana rebuild vs bcftools merge (3 rounds)
+2. **Cohort Extraction** — 5 superpopulation cohorts, VCF export
+3. **Multi-format Export** — 6 formats from single source (bcftools: VCF only)
+4. **Annotation Update** — In-place (GraphMana) vs full VCF rewrite (bcftools)
+5. **Lifecycle Simulation** — 7-phase project simulation (the headline figure)
+
+### Chr22 Benchmark Results (GraphMana vs bcftools, COMPLETE)
+
+**Benchmark 1: Incremental Addition** (chr22, 1M variants, 3 × 234 samples)
+
+| | Batch 1 | Batch 2 | Batch 3 | Total |
+|---|---|---|---|---|
+| GraphMana (rebuild) | 418s | 412s | 424s | 1,254s (+602s initial) |
+| bcftools (merge) | 117s | 125s | 133s | 374s |
+
+**Benchmark 2: Cohort Extraction** (5 superpopulation cohorts → VCF)
+
+| Cohort | GraphMana | bcftools |
+|--------|-----------|----------|
+| AFR (893) | 191s | 59s |
+| EUR (633) | 211s | 51s |
+| EAS (585) | 131s | 49s |
+| EUR+EAS (1218) | 238s | 64s |
+| ALL (3202) | 571s | 110s |
+
+**Benchmark 3: Multi-format Export** (from single source)
+
+| Format | GraphMana | bcftools |
+|--------|-----------|----------|
+| VCF | 473s | 96s |
+| TreeMix | 189s | N/A |
+| SFS-dadi | 86s | N/A |
+| SFS-fsc | 119s | N/A |
+| BED | 84s | N/A |
+| TSV | 85s | N/A |
+
+**Benchmark 4: Annotation Update** (53K BED regions)
+
+| | GraphMana | bcftools |
+|---|-----------|----------|
+| Time | **3.5s** | 96s |
+| Method | In-place update | Rewrite entire VCF |
+| Speedup | **27x** | baseline |
+
+**Benchmark 5: Lifecycle Simulation** (7 phases)
+
+| | GraphMana | bcftools |
+|---|-----------|----------|
+| Total time | 5,880s (98 min) | 1,006s (17 min) |
+| Operations completed | **46/46** | **17/26** |
+| TreeMix/SFS/BED exports | Supported | N/A (9 operations) |
+
+### Whole-Genome Benchmark Results (COMPLETE 2026-03-31)
+
+**Incremental import: 234 samples added to 70.7M-variant database**
+
+| Approach | Time | Status |
+|----------|------|--------|
+| Cypher transactions (2026-03-30) | Crashed at 20 min | Failed |
+| Neo4j Bolt read → rebuild (2026-03-31) | 10+ hr (estimated) | Too slow |
+| **CSV-to-CSV rebuild** | **182 min (3 hr)** | **Success** |
+
+Breakdown:
+- VCF parsing (chr22 batch, 1M variants): 3 min
+- CSV read + extend + write (70.7M variants, 214 GB): 160 min
+- neo4j-admin import: 15 min
+- Neo4j restart + indexes: 4 min
+
+Variant processing:
+- 1,066,557 extended (chr22 — actual genotypes)
+- 69,625,458 HomRef-extended (other chromosomes — zero-byte append)
+- 70,691,875 total variants preserved
+
+**Full pipeline timing (whole-genome from scratch):**
+
+| Step | Time |
+|------|------|
+| prepare-csv (22 VCFs, 2500 samples, 16 threads) | 95 min |
+| neo4j-admin import (214 GB CSVs → 166 GB DB) | 3 min |
+| Incremental add 234 samples (CSV-to-CSV) | 182 min |
+| **Total: initial + 1 incremental** | **280 min (4.7 hr)** |
+
+### Implementation
+
+- Benchmark script: `benchmarks/bench_comprehensive.py`
+- Fixtures: `benchmarks/fixtures/comprehensive/`
+- Results: `benchmarks/results/comprehensive_comprehensive.jsonl`
+- Incremental strategies:
+  - CSV-to-CSV rebuild: `ingest/incremental_rebuild.py::run_incremental_from_csv()` — fastest, requires CSV checkpoint
+  - Neo4j-based rebuild: `ingest/incremental_rebuild.py::run_incremental_rebuild()` — works without checkpoint, slow for whole-genome
+  - Cypher transactions: `ingest/incremental.py::IncrementalIngester` — original, works for small additions (<10K variants)
+  - Java server-side: `IncrementalExtendProcedure.java` — kept for future small-batch use
+
+---
+
+## Completed: Incremental Import Optimization (2026-03-30 to 2026-03-31)
+
+### CSV-to-CSV rebuild (2026-03-31, the winning strategy)
+- Reads existing variant_nodes.csv directly (no Neo4j query) at NVMe speed
+- Extends packed arrays in Python, writes new CSV, reimports via neo4j-admin
+- Whole-genome (70.7M variants): **182 min** — the only viable approach on 64 GB
+- Chr22 (1M variants): **7 min** vs 60+ min (Cypher) or 10+ hr (Bolt read)
+- CSV checkpoint kept as permanent artifact alongside Neo4j database
+- Auto-detected: if `--output-csv-dir` contains variant_nodes.csv, uses CSV path
+- Code: `ingest/incremental_rebuild.py::run_incremental_from_csv()`
+
+### Chromosome-wise streaming (memory optimization)
+- Replaced `_collect_variants_by_chr()` with `_stream_variants_by_chr()` generator
+- Memory: O(all variants) → O(largest chromosome), ~12x reduction
+- Code: `incremental.py` lines 169-237
+
+### Export-extend-reimport (performance optimization)
+- Bypasses Neo4j transaction engine entirely for large incremental imports
+- Reads existing data from Neo4j (read-only), extends in Python (numpy), rebuilds via neo4j-admin import
+- 6 min 45 sec for chr22 (1M variants, 234 samples) vs 60+ min with Cypher transactions
+- Auto-selected when `--neo4j-home` is provided with `--mode incremental`
+- Code: `ingest/incremental_rebuild.py`, routing in `pipeline.py`
+
+### Server-side Java procedure (kept but not primary path)
+- `graphmana.extendVariants` / `graphmana.extendHomRef` procedures created
+- Useful for small incremental additions (<10K variants) in the future
+- Code: `IncrementalExtendProcedure.java`
+
+---
+
+## Previous: Chromosome-wise Incremental Import Design (superseded)
+
+_Priority: High — overcomes the whole-genome incremental import limitation on 64 GB machines._
+
+### Problem
+Whole-genome incremental import (adding samples to a 70.7M-variant database) crashes Neo4j because updating millions of packed arrays in one continuous session exceeds available transaction memory.
+
+### Solution: Chromosome-wise Strategy
+Process one chromosome at a time, committing and releasing transaction memory between chromosomes.
+
+### Implementation Plan
+
+**Step 1: Chromosome-wise sequential import**
+```python
+for chrom in chromosomes:
+    ingest_incremental(vcf, panel, chromosome=chrom)
+    # Transaction log freed between chromosomes
+```
+- Each chromosome is 1-6M variants → fits in 16 GB heap
+- Simple, guaranteed to work on 64 GB machines
+
+**Step 2: Batch variant updates within each chromosome**
+```cypher
+-- Instead of one variant per transaction:
+UNWIND $updates AS u
+MATCH (v:Variant {variantId: u.variantId})
+SET v.gt_packed = u.gt_packed, v.ac = u.ac, ...
+```
+- 1000 variants per batch → 66,000 transactions vs 70,700,000
+- ~1000x less transaction overhead
+
+**Step 3: Auto-select strategy**
+```python
+def choose_strategy(n_variants, n_new_samples, available_ram):
+    bytes_per_variant = 50 + (n_new_samples + 3) // 4
+    total_write_mem = n_variants * bytes_per_variant
+    neo4j_available = available_ram * 0.4
+
+    if total_write_mem < neo4j_available:
+        return "whole-genome"       # Single pass
+    elif total_write_mem / 22 < neo4j_available:
+        return "chromosome-wise"    # Per-chromosome
+    else:
+        return "batched"            # Even single chromosome batched
+```
+
+### Files to Modify
+- `graphmana-cli/src/graphmana/ingest/incremental.py` — add chromosome-wise loop + batch updates
+- `graphmana-cli/src/graphmana/cli.py` — auto-select strategy in `ingest` command
+- `graphmana-cli/tests/test_incremental.py` — add chromosome-wise tests
+
+### Verification
+- Test on existing 1KGP 70.7M-variant database: add 10/100 samples incrementally
+- Verify gt_packed grows correctly, population arrays updated, sample count increases
+- Compare genotypes before/after for a known sample
+
+---
+
+## Planned: Other Items (lower priority)
+
+- [ ] Git push to GitHub (need Personal Access Token)
+- [ ] Version tags: v0.1.0, v0.5.0, v0.9.0, v1.0.0
+- [ ] SFS dadi 3-population implementation
+- [ ] `--auto-start-neo4j` on `load-csv` — should stop Neo4j first, import, then start
+- [ ] BCF output (`--output-type b`)
+- [ ] mkdocs/Sphinx documentation site
+- [ ] Docker image rebuild
+- [ ] Nature Methods manuscript writing
+
+---
+
+## Resume Checklist (after computer restart)
+
+1. `conda activate graphmana` — Python environment
+2. `~/neo4j/bin/neo4j start` — start Neo4j (data at `~/neo4j/data/databases/neo4j/`, 166 GB)
+3. `graphmana status --neo4j-password graphmana` — verify database (70.7M variants, 3202 samples)
+4. `cd /mnt/data/GraphMana` — project directory
+5. `pytest graphmana-cli/tests/ -q` — verify 1230 tests pass
+6. Neo4j config: heap=16g, pagecache=16g at `~/neo4j/conf/neo4j.conf`
+7. Git: initial commit done, no remote yet (need GitHub PAT)
+8. Benchmark outputs at `results/bench/` — do NOT delete

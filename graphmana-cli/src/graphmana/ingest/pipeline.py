@@ -10,7 +10,13 @@ import logging
 import tempfile
 from pathlib import Path
 
-from graphmana.config import DEFAULT_BATCH_SIZE, DEFAULT_DATABASE, DEFAULT_NEO4J_URI
+from graphmana.config import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_DATABASE,
+    DEFAULT_NEO4J_PASSWORD,
+    DEFAULT_NEO4J_URI,
+    DEFAULT_NEO4J_USER,
+)
 from graphmana.db.queries import FETCH_EXISTING_SAMPLE_IDS, FETCH_MAX_PACKED_INDEX
 from graphmana.filtering.import_filters import ImportFilterChain, ImportFilterConfig
 from graphmana.ingest.csv_emitter import CSVEmitter
@@ -202,8 +208,8 @@ def run_ingest(
     threads: int = 1,
     # load-csv options
     neo4j_uri: str | None = None,
-    neo4j_user: str = "neo4j",
-    neo4j_password: str = "graphmana",
+    neo4j_user: str = DEFAULT_NEO4J_USER,
+    neo4j_password: str = DEFAULT_NEO4J_PASSWORD,
 ) -> dict:
     """Combined: generate CSVs + load into Neo4j, or incremental import.
 
@@ -225,6 +231,101 @@ def run_ingest(
 
     # Route to incremental if needed
     if mode == "incremental":
+        # Use rebuild strategy (export-extend-reimport) when neo4j_home is
+        # provided — this is 5-10x faster than the Cypher transaction approach
+        # because it bypasses Neo4j's transaction engine entirely.
+        if neo4j_home is not None:
+            rebuild_csv_dir = Path(output_csv_dir) if output_csv_dir else Path(
+                tempfile.mkdtemp(prefix="graphmana_incr_rebuild_")
+            )
+
+            # Check for CSV checkpoint: if the output dir already contains
+            # variant_nodes.csv from a prior prepare-csv, use the fast
+            # CSV-to-CSV path (no Neo4j reads needed).
+            existing_checkpoint = rebuild_csv_dir / "variant_nodes.csv"
+            if existing_checkpoint.exists():
+                from graphmana.ingest.incremental_rebuild import run_incremental_from_csv
+
+                logger.info(
+                    "CSV checkpoint found at %s — using CSV-to-CSV fast path",
+                    rebuild_csv_dir,
+                )
+                # Count existing samples from the checkpoint
+                with open(rebuild_csv_dir / "sample_nodes.csv") as _sf:
+                    _n_existing = sum(1 for _ in _sf) - 1  # minus header
+
+                merged_csv_dir = Path(
+                    tempfile.mkdtemp(prefix="graphmana_incr_merged_")
+                )
+                summary = run_incremental_from_csv(
+                    existing_csv_dir=rebuild_csv_dir,
+                    vcf_path=vcf_path,
+                    panel_path=panel_path,
+                    output_csv_dir=merged_csv_dir,
+                    neo4j_home=neo4j_home,
+                    n_existing=_n_existing,
+                    stratify_by=stratify_by,
+                    include_filtered=include_filtered,
+                    region=region,
+                    dataset_id=dataset_id,
+                    source_file=str(vcf_path),
+                    database=database or DEFAULT_DATABASE,
+                    threads=threads,
+                )
+
+                # Update checkpoint: replace old CSVs with merged ones
+                import shutil
+                for csv_file in merged_csv_dir.glob("*.csv"):
+                    shutil.move(str(csv_file), str(rebuild_csv_dir / csv_file.name))
+                shutil.rmtree(merged_csv_dir, ignore_errors=True)
+
+            else:
+                # No checkpoint — use Neo4j-based rebuild
+                from graphmana.db.connection import GraphManaConnection
+                from graphmana.ingest.incremental_rebuild import run_incremental_rebuild
+
+                conn = GraphManaConnection(
+                    effective_uri, neo4j_user, neo4j_password, database=database
+                )
+                conn.__enter__()
+                try:
+                    summary = run_incremental_rebuild(
+                        conn,
+                        vcf_path,
+                        panel_path,
+                        rebuild_csv_dir,
+                        neo4j_home=neo4j_home,
+                        stratify_by=stratify_by,
+                        include_filtered=include_filtered,
+                        region=region,
+                        dataset_id=dataset_id,
+                        source_file=str(vcf_path),
+                        database=database or DEFAULT_DATABASE,
+                        threads=threads,
+                    )
+                except Exception:
+                    try:
+                        conn.__exit__(None, None, None)
+                    except Exception:
+                        pass
+                    raise
+
+            # Apply post-import indexes
+            from graphmana.ingest.loader import apply_post_import_indexes
+
+            apply_post_import_indexes(
+                effective_uri,
+                neo4j_user,
+                neo4j_password,
+                database=database,
+                reference_genome=reference,
+                chr_naming_style=chr_style,
+            )
+
+            summary["mode"] = "incremental_rebuild"
+            return summary
+
+        # Fallback: Cypher transaction approach (when neo4j_home not available)
         return run_incremental(
             vcf_path,
             panel_path,
@@ -344,8 +445,8 @@ def run_incremental(
     panel_path: str | Path,
     *,
     neo4j_uri: str = DEFAULT_NEO4J_URI,
-    neo4j_user: str = "neo4j",
-    neo4j_password: str = "graphmana",
+    neo4j_user: str = DEFAULT_NEO4J_USER,
+    neo4j_password: str = DEFAULT_NEO4J_PASSWORD,
     database: str | None = None,
     stratify_by: str = "superpopulation",
     reference: str = "unknown",
@@ -533,5 +634,8 @@ def run_incremental(
             )
         except Exception:
             logger.warning("Failed to record provenance log", exc_info=True)
+            summary["provenance_recorded"] = False
+        else:
+            summary["provenance_recorded"] = True
 
         return summary

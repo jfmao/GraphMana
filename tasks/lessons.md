@@ -268,4 +268,42 @@
   of sequential 6-8 hours.
 - **Rule**: When accepting multiple inputs in CLI, verify ALL inputs are actually processed.
 
+### 2026-03-28: Neo4j RETURN v fetches ALL properties — use property-selected queries
+
+- **Bug**: All export queries used `RETURN v` which returns entire Variant nodes including
+  gt_packed (800+ bytes), phase_packed (400+ bytes), ploidy_packed (400+ bytes). For 70.7M
+  variants at ~1,600 bytes each = 112 GB in Neo4j driver buffers → OOM kill.
+- **Fix**: Added three query tiers: FAST (pop arrays only, ~300 bytes), GENOTYPES (packed
+  arrays + metadata, no pop arrays), FULL (legacy). FAST PATH exports (TreeMix, SFS, BED,
+  TSV) now fetch only what they need.
+- **Rule**: Never use `RETURN v` for large-scale queries. Always select specific properties.
+
+### 2026-03-28: ORDER BY on millions of rows causes Neo4j GC pauses
+
+- **Bug**: `ORDER BY v.pos` on chromosomes with 5-6M variants caused Neo4j JVM to
+  allocate a sort buffer exceeding heap, triggering 240s stop-the-world GC pauses that
+  killed the Bolt connection.
+- **Fix**: (1) Skip ORDER BY for aggregation exports that don't need positional order
+  (TreeMix, SFS). (2) Batched pagination for ordered exports: query 500K variants at a
+  time with `WHERE v.pos > $last_pos ... LIMIT $batch_size`.
+- **Rule**: Never ORDER BY on more than ~1M rows without pagination. Use LIMIT + cursor.
+
+### 2026-03-28: SFS exporters must not accumulate all variant dicts in memory
+
+- **Bug**: SFS dadi and SFS fsc built `all_variants: list[dict]` with 70M+ entries
+  (~21 GB), causing OS to kill Neo4j to free memory.
+- **Fix**: Accumulate SFS bins (numpy array, ~1 KB) directly while streaming variants.
+  Memory usage dropped from 21 GB to <100 MB.
+- **Rule**: Never accumulate variant-level data in lists for whole-genome operations.
+  Stream and aggregate incrementally.
+
+### 2026-03-29: SFS --sfs-folded flag required when no ancestral allele information
+
+- **Bug**: SFS fsc benchmark reported 0 variants. Default is `polarized=True` (unfolded),
+  which requires `is_polarized=True` on each variant. Without ancestral allele FASTA
+  during import, `is_polarized` is NULL → all variants skipped.
+- **Fix**: Add `--sfs-folded` flag to benchmark commands. Not a code bug.
+- **Rule**: When testing SFS exports, always verify the polarized/folded setting matches
+  the available data. Most datasets without ancestral allele info need `--sfs-folded`.
+
 (Older entries go here)

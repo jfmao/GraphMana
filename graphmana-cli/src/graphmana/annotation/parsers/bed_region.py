@@ -9,9 +9,17 @@ from typing import Iterator
 from graphmana.annotation.parsers.base import BaseAnnotationParser
 from graphmana.db.queries import (
     CREATE_IN_REGION_BATCH,
-    FIND_VARIANTS_IN_INTERVAL,
     MERGE_REGULATORY_ELEMENT_BATCH,
 )
+
+# Batch variant-region overlap query: processes all regions in one UNWIND
+# instead of one query per region (~1000x fewer Cypher round-trips).
+FIND_VARIANTS_IN_INTERVAL_BATCH = """
+UNWIND $regions AS r
+MATCH (v:Variant)
+WHERE v.chr = r.chr AND v.pos >= r.start AND v.pos <= r.end
+RETURN v.variantId AS variantId, r.id AS regionId
+"""
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +68,8 @@ class BEDRegionParser(BaseAnnotationParser):
                     end = int(parts[2])
                 except (ValueError, IndexError):
                     continue
+                if start > end:
+                    continue
                 name = parts[3] if len(parts) >= 4 else None
                 counter += 1
                 element_id = name if name else f"{chrom}:{start}-{end}_{counter}"
@@ -77,25 +87,21 @@ class BEDRegionParser(BaseAnnotationParser):
         with self._conn.driver.session() as session:
             session.run(MERGE_REGULATORY_ELEMENT_BATCH, {"elements": batch})
 
-        # Step 2: For each region, find overlapping variants and create edges
+        # Step 2: Find overlapping variants and create edges in one query.
+        # Uses UNWIND to process all regions in a single Cypher execution
+        # instead of one query per region (1000x fewer round-trips).
         total_edges = 0
-        edge_batch: list[dict] = []
-        for elem in batch:
-            with self._conn.driver.session() as session:
-                result = session.run(
-                    FIND_VARIANTS_IN_INTERVAL,
-                    {"chr": elem["chr"], "start": elem["start"], "end": elem["end"]},
-                )
-                for record in result:
-                    edge_batch.append(
-                        {
-                            "variantId": record["variantId"],
-                            "regionId": elem["id"],
-                        }
-                    )
+        with self._conn.driver.session() as session:
+            result = session.run(
+                FIND_VARIANTS_IN_INTERVAL_BATCH,
+                {"regions": batch},
+            )
+            edge_batch = [
+                {"variantId": r["variantId"], "regionId": r["regionId"]}
+                for r in result
+            ]
 
         if edge_batch:
-            # Create edges in sub-batches
             for i in range(0, len(edge_batch), 5000):
                 sub = edge_batch[i : i + 5000]
                 with self._conn.driver.session() as session:

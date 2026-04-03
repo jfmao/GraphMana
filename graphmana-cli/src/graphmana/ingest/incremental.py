@@ -92,11 +92,16 @@ class IncrementalIngester:
     n_variants_created: int = field(default=0, init=False)
     n_samples_created: int = field(default=0, init=False)
     n_populations_created: int = field(default=0, init=False)
+    _server_side_available: bool | None = field(default=None, init=False)
 
     def run(self, parser, *, chunk_size: int = DEFAULT_BATCH_SIZE, filter_chain=None) -> dict:
         """Run the full incremental ingestion pipeline.
 
-        Processes the VCF chromosome-by-chromosome to limit memory usage.
+        Streams the VCF chromosome-by-chromosome so that only one
+        chromosome's worth of variant data is held in memory at a time.
+        This reduces peak memory from O(all variants) to O(largest
+        chromosome) and releases Neo4j transaction log pressure between
+        chromosomes.
 
         Args:
             parser: VCFParser for the new VCF file.
@@ -106,17 +111,34 @@ class IncrementalIngester:
         Returns:
             Summary dict with counts.
         """
-        # 1. Collect new VCF variants grouped by chromosome
-        chr_variants = self._collect_variants_by_chr(parser, filter_chain)
+        import gc
 
-        # 2. Get all chromosomes from the DB
-        existing_chrs = self._fetch_existing_chromosomes()
+        # 1. Get all chromosomes from the DB upfront
+        existing_chrs = set(self._fetch_existing_chromosomes())
+        seen_chrs = set()
 
-        # 3. Process each chromosome
-        all_chrs = sorted(set(list(chr_variants.keys()) + existing_chrs))
-        for chrom in all_chrs:
-            new_on_chr = chr_variants.get(chrom, {})
-            self._process_chromosome(chrom, new_on_chr, chunk_size)
+        # 2. Stream through VCF chromosome-by-chromosome
+        for chrom, new_variants in self._stream_variants_by_chr(parser, filter_chain):
+            logger.info(
+                "Processing chromosome %s (%d new variants)",
+                chrom,
+                len(new_variants),
+            )
+            seen_chrs.add(chrom)
+            self._process_chromosome(chrom, new_variants, chunk_size)
+            del new_variants
+            gc.collect()
+
+        # 3. HomRef-extend DB chromosomes absent from new VCF
+        missing_chrs = sorted(existing_chrs - seen_chrs)
+        if missing_chrs:
+            logger.info(
+                "HomRef-extending %d chromosomes not in new VCF: %s",
+                len(missing_chrs),
+                missing_chrs,
+            )
+        for chrom in missing_chrs:
+            self._process_chromosome(chrom, {}, chunk_size)
 
         # 4. Create Sample nodes + IN_POPULATION edges
         self._create_sample_nodes()
@@ -145,34 +167,34 @@ class IncrementalIngester:
         )
         return summary
 
-    def _collect_variants_by_chr(self, parser, filter_chain) -> dict[str, dict[str, _VariantData]]:
-        """Iterate the new VCF and collect variant data grouped by chromosome.
+    def _stream_variants_by_chr(self, parser, filter_chain):
+        """Yield ``(chrom, {variantId: _VariantData})`` one chromosome at a time.
 
-        Returns:
-            {chr: {variantId: _VariantData}}.
+        Exploits VCF sort order: all records for chromosome N appear before
+        chromosome N+1.  Memory for each chromosome's dict is released as
+        soon as the caller advances the generator.
+
+        Yields:
+            Tuples of ``(chromosome_name, {variant_id: _VariantData})``.
         """
-        from graphmana.ingest.genotype_packer import unpack_phase
+        from graphmana.ingest.genotype_packer import unpack_genotypes, unpack_phase
 
-        chr_variants: dict[str, dict[str, _VariantData]] = {}
         n_new_samples = len(self.pop_map_new.sample_ids)
+        # packed: 0=HomRef, 1=Het, 2=HomAlt, 3=Missing
+        # cyvcf2: 0=HomRef, 1=Het, 3=HomAlt, 2=Missing
+        reverse_remap = np.array([0, 1, 3, 2], dtype=np.int8)
+
+        current_chr: str | None = None
+        current_variants: dict[str, _VariantData] = {}
 
         for rec in parser:
             if filter_chain is not None and not filter_chain.accepts(rec):
                 continue
 
-            # Unpack packed codes and reverse-remap to cyvcf2 codes.
-            # packed: 0=HomRef, 1=Het, 2=HomAlt, 3=Missing
-            # cyvcf2: 0=HomRef, 1=Het, 3=HomAlt, 2=Missing
-            from graphmana.ingest.genotype_packer import unpack_genotypes
-
             packed_codes = unpack_genotypes(rec.gt_packed, n_new_samples)
-            # Reverse remap: packed → cyvcf2
-            reverse_remap = np.array([0, 1, 3, 2], dtype=np.int8)
             cyvcf2_codes = reverse_remap[packed_codes]
-
             phase_bits = unpack_phase(rec.phase_packed, n_new_samples)
 
-            # Ploidy bits
             if rec.ploidy_packed:
                 from graphmana.ingest.genotype_packer import unpack_ploidy
 
@@ -205,14 +227,127 @@ class IncrementalIngester:
                 allele_index=rec.allele_index,
             )
 
-            chr_variants.setdefault(rec.chr, {})[rec.id] = vdata
+            if rec.chr != current_chr:
+                if current_chr is not None:
+                    yield current_chr, current_variants
+                    current_variants = {}
+                current_chr = rec.chr
+            current_variants[vdata.variant_id] = vdata
 
-        return chr_variants
+        if current_chr is not None:
+            yield current_chr, current_variants
 
     def _fetch_existing_chromosomes(self) -> list[str]:
         """Get list of chromosome IDs from the database."""
         result = self.conn.execute_read(queries.FETCH_CHROMOSOMES)
         return [r["chr"] for r in result]
+
+    # ------------------------------------------------------------------
+    # Server-side Java procedure support
+    # ------------------------------------------------------------------
+
+    def _check_server_side(self) -> bool:
+        """Check if the graphmana.extendVariants procedure is available."""
+        if self._server_side_available is not None:
+            return self._server_side_available
+        try:
+            result = self.conn.execute_read(
+                "SHOW PROCEDURES YIELD name WHERE name = 'graphmana.extendVariants' RETURN name"
+            )
+            self._server_side_available = len(result) > 0
+        except Exception:
+            self._server_side_available = False
+        if self._server_side_available:
+            logger.info("Server-side extend procedure detected — using fast path")
+        else:
+            logger.info("Server-side extend procedure not available — using Python path")
+        return self._server_side_available
+
+    def _server_side_extend(
+        self, chrom: str, new_variants: dict[str, _VariantData],
+        chunk_size: int = 5000,
+    ) -> tuple[int, int]:
+        """Call graphmana.extendVariants in batches for variants with genotypes.
+
+        Sends *chunk_size* variants per CALL to avoid Bolt connection timeouts
+        on large chromosomes. Each CALL runs server-side with zero per-variant
+        Bolt round-trips.
+
+        Returns (n_extended, n_failed).
+        """
+        gt_remap = np.array([0, 1, 3, 2], dtype=np.int8)  # cyvcf2 → packed
+
+        # Build all entries first
+        all_entries = []
+        for vid, vd in new_variants.items():
+            packed_codes = gt_remap[vd.gt_types]
+            all_entries.append({
+                "variantId": vid,
+                "gtCodes": packed_codes.tolist(),
+                "phaseBits": vd.phase_bits.tolist(),
+                "ploidyBits": vd.ploidy_bits.tolist(),
+                "popIds": vd.pop_ids,
+                "ac": [int(x) for x in vd.ac],
+                "an": [int(x) for x in vd.an],
+                "hetCount": [int(x) for x in vd.het_count],
+                "homAltCount": [int(x) for x in vd.hom_alt_count],
+            })
+
+        total_extended = 0
+        total_failed = 0
+        n_chunks = (len(all_entries) + chunk_size - 1) // chunk_size
+
+        for i in range(0, len(all_entries), chunk_size):
+            batch = all_entries[i : i + chunk_size]
+            chunk_num = i // chunk_size + 1
+            logger.info(
+                "  Server-side extend chunk %d/%d (%d variants)",
+                chunk_num, n_chunks, len(batch),
+            )
+            result = self.conn.execute_write(
+                "CALL graphmana.extendVariants("
+                "$chromosome, $nExisting, $newGenotypes, $batchSize)",
+                {
+                    "chromosome": chrom,
+                    "nExisting": self.n_existing,
+                    "newGenotypes": batch,
+                    "batchSize": len(batch),
+                },
+            )
+            row = result[0] if result else {"extended": 0, "failed": 0}
+            total_extended += int(row.get("extended", 0))
+            total_failed += int(row.get("failed", 0))
+
+        return total_extended, total_failed
+
+    def _server_side_homref(self, chrom: str, n_new_samples: int) -> tuple[int, int]:
+        """Call graphmana.extendHomRef for variants absent from new VCF.
+
+        Returns (n_extended, n_failed).
+        """
+        new_pop_ids = self.pop_map_new.pop_ids
+        new_pop_an = [
+            2 * self.pop_map_new.n_samples_per_pop[pid] for pid in new_pop_ids
+        ]
+
+        result = self.conn.execute_write(
+            "CALL graphmana.extendHomRef($chromosome, $nExisting, $nNew, "
+            "$newPopIds, $newPopAn, $batchSize)",
+            {
+                "chromosome": chrom,
+                "nExisting": self.n_existing,
+                "nNew": n_new_samples,
+                "newPopIds": new_pop_ids,
+                "newPopAn": new_pop_an,
+                "batchSize": 2000,
+            },
+        )
+        row = result[0] if result else {"extended": 0, "failed": 0}
+        return int(row.get("extended", 0)), int(row.get("failed", 0))
+
+    # ------------------------------------------------------------------
+    # Chromosome processing
+    # ------------------------------------------------------------------
 
     def _process_chromosome(
         self,
@@ -233,19 +368,33 @@ class IncrementalIngester:
 
         n_new_samples = len(self.pop_map_new.sample_ids)
 
-        # Extend variants that have actual genotypes in new VCF
-        for i in range(0, len(to_extend_ids), chunk_size):
-            batch_ids = to_extend_ids[i : i + chunk_size]
-            self._extend_variant_batch(batch_ids, new_variants, n_new_samples)
-            self.n_variants_extended += len(batch_ids)
+        if self._check_server_side() and (to_extend_ids or to_extend_homref_ids):
+            # ---- Server-side fast path ----
+            if to_extend_ids:
+                extend_variants = {vid: new_variants[vid] for vid in to_extend_ids}
+                n_ext, n_fail = self._server_side_extend(chrom, extend_variants)
+                self.n_variants_extended += n_ext
+                if n_fail:
+                    logger.warning("Server-side extend: %d failures on %s", n_fail, chrom)
 
-        # Extend variants that are HomRef-only for new samples
-        for i in range(0, len(to_extend_homref_ids), chunk_size):
-            batch_ids = to_extend_homref_ids[i : i + chunk_size]
-            self._extend_homref_batch(batch_ids, n_new_samples)
-            self.n_variants_homref_extended += len(batch_ids)
+            if to_extend_homref_ids:
+                n_hr, n_fail = self._server_side_homref(chrom, n_new_samples)
+                self.n_variants_homref_extended += n_hr
+                if n_fail:
+                    logger.warning("Server-side homref: %d failures on %s", n_fail, chrom)
+        else:
+            # ---- Python fallback path ----
+            for i in range(0, len(to_extend_ids), chunk_size):
+                batch_ids = to_extend_ids[i : i + chunk_size]
+                self._extend_variant_batch(batch_ids, new_variants, n_new_samples)
+                self.n_variants_extended += len(batch_ids)
 
-        # Create brand-new variants
+            for i in range(0, len(to_extend_homref_ids), chunk_size):
+                batch_ids = to_extend_homref_ids[i : i + chunk_size]
+                self._extend_homref_batch(batch_ids, n_new_samples)
+                self.n_variants_homref_extended += len(batch_ids)
+
+        # Create brand-new variants (always Python — infrequent operation)
         if to_create:
             self._create_new_variant_batch(to_create, chrom)
             self.n_variants_created += len(to_create)

@@ -12,7 +12,11 @@ from pathlib import Path
 import numpy as np
 
 from graphmana.export.base import BaseExporter
-from graphmana.export.sfs_utils import build_sfs_1d, build_sfs_2d
+from graphmana.export.sfs_utils import (
+    fold_sfs,
+    fold_sfs_2d,
+    hypergeometric_projection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,66 +65,91 @@ class SFSDadiExporter(BaseExporter):
             raise ValueError("dadi SFS supports 1-3 populations")
 
         target_chroms = self._get_target_chromosomes()
+        n_pops = len(populations)
 
-        # Collect all variants (FAST PATH — only reads pop arrays, not genotypes)
-        all_variants: list[dict] = []
+        # Initialize SFS array — accumulate directly while streaming variants
+        # to avoid storing 70M+ variant dicts in memory.
+        if n_pops == 1:
+            sfs = np.zeros(projection[0] + 1, dtype=np.float64)
+        elif n_pops == 2:
+            sfs = np.zeros((projection[0] + 1, projection[1] + 1), dtype=np.float64)
+        else:
+            raise NotImplementedError("3-population SFS not yet implemented")
+
         pop_ids: list[str] | None = None
+        pop_indices: list[int] | None = None
+        n_used = 0
+
         for chrom in target_chroms:
-            for props in self._iter_variants(chrom):
+            for props in self._iter_variants_fast(chrom, ordered=False):
                 var_pop_ids = props.get("pop_ids")
                 if var_pop_ids is None:
                     continue
                 if pop_ids is None:
                     pop_ids = list(var_pop_ids)
+                    pop_indices = _resolve_pop_indices(pop_ids, populations)
+
                 # Skip monomorphic sites unless requested
                 if not include_monomorphic:
                     ac_total = props.get("ac_total", 0)
                     an_total = props.get("an_total", 0)
                     if ac_total == 0 or ac_total == an_total:
                         continue
-                all_variants.append(props)
+
+                ac_arr = props.get("ac")
+                an_arr = props.get("an")
+                if ac_arr is None or an_arr is None:
+                    continue
+
+                # Accumulate into SFS directly
+                if n_pops == 1:
+                    idx = pop_indices[0]
+                    if idx >= len(ac_arr) or idx >= len(an_arr):
+                        continue
+                    ac_val, an_val = int(ac_arr[idx]), int(an_arr[idx])
+                    if an_val < projection[0]:
+                        continue
+                    if polarized and not props.get("is_polarized", False):
+                        continue
+                    sfs += hypergeometric_projection(ac_val, an_val, projection[0])
+                else:  # n_pops == 2
+                    i1, i2 = pop_indices[0], pop_indices[1]
+                    if i1 >= len(ac_arr) or i2 >= len(ac_arr):
+                        continue
+                    if i1 >= len(an_arr) or i2 >= len(an_arr):
+                        continue
+                    ac1, an1 = int(ac_arr[i1]), int(an_arr[i1])
+                    ac2, an2 = int(ac_arr[i2]), int(an_arr[i2])
+                    if an1 < projection[0] or an2 < projection[1]:
+                        continue
+                    if polarized and not props.get("is_polarized", False):
+                        continue
+                    p1 = hypergeometric_projection(ac1, an1, projection[0])
+                    p2 = hypergeometric_projection(ac2, an2, projection[1])
+                    sfs += np.outer(p1, p2)
+
+                n_used += 1
 
         if pop_ids is None:
             raise ValueError("No variants with population data found")
 
-        pop_indices = _resolve_pop_indices(pop_ids, populations)
-
-        # Build SFS
-        if len(populations) == 1:
-            sfs = build_sfs_1d(all_variants, pop_indices[0], projection[0], polarized=polarized)
-        elif len(populations) == 2:
-            sfs = build_sfs_2d(
-                all_variants,
-                pop_indices[0],
-                pop_indices[1],
-                projection[0],
-                projection[1],
-                polarized=polarized,
-            )
-        else:
-            # 3-pop: build as nested outer products
-            raise NotImplementedError("3-population SFS not yet implemented")
+        # Fold if not polarized
+        if not polarized:
+            sfs = fold_sfs(sfs) if n_pops == 1 else fold_sfs_2d(sfs)
 
         # Write dadi .fs format
         output = Path(output)
         output.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output, "w") as f:
-            n_used = len(all_variants)
             f.write(
                 f"# {n_used} SNPs; populations: {' '.join(populations)}; "
                 f"projections: {' '.join(str(p) for p in projection)}\n"
             )
-
-            # Dimensions line
             dims = [str(p + 1) for p in projection]
             f.write(" ".join(dims) + "\n")
-
-            # Flattened SFS counts
             flat = sfs.flatten()
             f.write(" ".join(f"{v:.6f}" for v in flat) + "\n")
-
-            # Mask line: mask bin 0 and last bin for folded SFS
             mask = np.zeros_like(flat, dtype=int)
             if not polarized:
                 mask[0] = 1
@@ -129,12 +158,12 @@ class SFSDadiExporter(BaseExporter):
 
         logger.info(
             "dadi SFS export: %d variants, populations=%s, projection=%s",
-            len(all_variants),
+            n_used,
             populations,
             projection,
         )
         return {
-            "n_variants": len(all_variants),
+            "n_variants": n_used,
             "n_samples": self._get_sample_count(),
             "populations": populations,
             "projection": projection,

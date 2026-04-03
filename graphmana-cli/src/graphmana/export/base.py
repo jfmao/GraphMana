@@ -2,26 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, TypedDict
 
 import numpy as np
 
 from graphmana.db.connection import GraphManaConnection
-from graphmana.db.queries import (
-    ACTIVE_SAMPLE_FILTER,
-    FETCH_CHROMOSOMES,
-    FETCH_SAMPLES,
-    FETCH_SAMPLES_BY_POPULATION,
-    FETCH_VARIANTS_BY_CHR,
-    FETCH_VARIANTS_BY_CHR_ANNOTATED,
-    FETCH_VARIANTS_BY_CHR_CADD,
-    FETCH_VARIANTS_REGION,
-    FETCH_VARIANTS_REGION_ANNOTATED,
-    FETCH_VARIANTS_REGION_CADD,
-)
+from graphmana.db import queries as Q
 from graphmana.filtering.export_filters import ExportFilter, ExportFilterConfig
 from graphmana.ingest.genotype_packer import unpack_genotypes, unpack_phase, unpack_ploidy
 
@@ -76,13 +67,13 @@ class BaseExporter(ABC):
         if self._filter.has_population_filter():
             query = (
                 "MATCH (s:Sample)-[:IN_POPULATION]->(p:Population) "
-                f"WHERE ({ACTIVE_SAMPLE_FILTER}) "
+                f"WHERE ({Q.ACTIVE_SAMPLE_FILTER}) "
                 "AND p.populationId IN $populations "
                 "RETURN count(s) AS n"
             )
             params = {"populations": self._filter.populations}
         else:
-            query = "MATCH (s:Sample) " f"WHERE {ACTIVE_SAMPLE_FILTER} " "RETURN count(s) AS n"
+            query = "MATCH (s:Sample) " f"WHERE {Q.ACTIVE_SAMPLE_FILTER} " "RETURN count(s) AS n"
             params = {}
 
         with self._conn.driver.session() as session:
@@ -100,10 +91,10 @@ class BaseExporter(ABC):
             return self._samples
 
         if self._filter.has_population_filter():
-            query = FETCH_SAMPLES_BY_POPULATION
+            query = Q.FETCH_SAMPLES_BY_POPULATION
             params = {"populations": self._filter.populations}
         else:
-            query = FETCH_SAMPLES
+            query = Q.FETCH_SAMPLES
             params = {}
 
         with self._conn.driver.session() as session:
@@ -130,7 +121,7 @@ class BaseExporter(ABC):
             return self._chromosomes
 
         with self._conn.driver.session() as session:
-            result = session.run(FETCH_CHROMOSOMES)
+            result = session.run(Q.FETCH_CHROMOSOMES)
             self._chromosomes = [dict(record) for record in result]
 
         logger.info("Loaded %d chromosomes", len(self._chromosomes))
@@ -142,16 +133,36 @@ class BaseExporter(ABC):
         available = [c["chr"] for c in chroms]
         return self._filter.get_target_chromosomes(available)
 
-    def _iter_variants(
-        self, chr_name: str, *, start: int | None = None, end: int | None = None
-    ) -> Iterator[dict]:
-        """Stream variant nodes for a chromosome from Neo4j.
+    # Export batch size for paginated queries (500K variants per batch).
+    # Larger than DEFAULT_BATCH_SIZE (100K) because export reads are streaming
+    # and sort-only, while import batches carry packed arrays and write locks.
+    # Each batch sorts independently in Neo4j heap, avoiding GC pauses from
+    # sorting millions of rows at once.
+    _BATCH_SIZE = 500_000
 
-        Uses driver.session() directly to support lazy iteration over
-        potentially millions of variants. Applies post-query filters.
+    def _iter_variants(
+        self,
+        chr_name: str,
+        *,
+        need_genotypes: bool = True,
+        need_order: bool = True,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> Iterator[dict]:
+        """Smart variant iterator that selects the optimal query strategy.
+
+        Automatically picks the right Cypher query based on what the caller
+        needs, and uses batched pagination for ordered queries to avoid
+        Neo4j GC pauses on large chromosomes.
 
         Args:
             chr_name: Chromosome name.
+            need_genotypes: If True, include gt_packed/phase_packed/ploidy_packed
+                (FULL PATH). If False, return only population arrays and metadata
+                (FAST PATH — ~5x less data per variant).
+            need_order: If True, results are ordered by position. If False,
+                skip ORDER BY to avoid Neo4j sorting millions of rows in heap.
+                Set False for aggregation-only exports (TreeMix, SFS).
             start: Optional start position (inclusive).
             end: Optional end position (inclusive).
 
@@ -165,50 +176,122 @@ class BaseExporter(ABC):
         else:
             region_start, region_end = start, end
 
-        # Three-way routing: annotation filter > CADD-only filter > plain
+        # --- Annotation/CADD filters use legacy RETURN v queries ---
+        if self._filter.has_annotation_filter() or self._filter.has_cadd_filter():
+            yield from self._iter_variants_legacy(chr_name, region_start, region_end, use_region)
+            return
+
+        # --- Select query based on need_genotypes × need_order × use_region ---
+        if use_region:
+            if need_genotypes:
+                query = Q.FETCH_VARIANTS_REGION_GENOTYPES
+            else:
+                query = Q.FETCH_VARIANTS_REGION_FAST if need_order else Q.FETCH_VARIANTS_REGION_FAST_UNORDERED
+            params = {"chr": chr_name, "start": region_start, "end": region_end}
+            # Region queries are always small enough for a single session
+            yield from self._run_streaming_query(query, params, need_genotypes)
+            return
+
+        # Full-chromosome queries: use batched pagination for ordered queries
+        if need_order:
+            yield from self._iter_batched(chr_name, need_genotypes)
+        else:
+            query = Q.FETCH_VARIANTS_BY_CHR_FAST_UNORDERED
+            params = {"chr": chr_name}
+            yield from self._run_streaming_query(query, params, need_genotypes=False)
+
+    def _iter_batched(
+        self, chr_name: str, need_genotypes: bool
+    ) -> Iterator[dict]:
+        """Paginate through variants in position-range batches.
+
+        Each batch sorts only _BATCH_SIZE rows in Neo4j heap (instant),
+        uses a fresh session per batch (no long-lived connections), and
+        releases memory between batches.
+        """
+        query = (
+            Q.FETCH_VARIANTS_BY_CHR_GENOTYPES_BATCHED
+            if need_genotypes
+            else Q.FETCH_VARIANTS_BY_CHR_FAST_BATCHED
+        )
+        last_pos = -1
+        while True:
+            params = {
+                "chr": chr_name,
+                "last_pos": last_pos,
+                "batch_size": self._BATCH_SIZE,
+            }
+            batch = []
+            with self._conn.driver.session(fetch_size=5000) as session:
+                result = session.run(query, params)
+                for record in result:
+                    props = dict(record)
+                    if self._filter.variant_passes(props):
+                        batch.append(props)
+                    last_pos = record["pos"]
+
+            if not batch:
+                break
+
+            yield from batch
+
+            # If we got fewer than batch_size, we've exhausted this chromosome
+            if len(batch) < self._BATCH_SIZE:
+                break
+
+    def _run_streaming_query(
+        self, query: str, params: dict, need_genotypes: bool
+    ) -> Iterator[dict]:
+        """Run a single streaming query and yield filtered results."""
+        fetch_size = 500 if need_genotypes else 5000
+        record_key = "v" if "RETURN v\n" in query or query.strip().endswith("RETURN v") else None
+
+        with self._conn.driver.session(fetch_size=fetch_size) as session:
+            result = session.run(query, params)
+            for record in result:
+                props = dict(record[record_key]) if record_key else dict(record)
+                if self._filter.variant_passes(props):
+                    yield props
+
+    def _iter_variants_legacy(
+        self,
+        chr_name: str,
+        region_start: int | None,
+        region_end: int | None,
+        use_region: bool,
+    ) -> Iterator[dict]:
+        """Legacy path for annotation/CADD-filtered queries (RETURN v)."""
         if self._filter.has_annotation_filter():
             if use_region:
-                query = FETCH_VARIANTS_REGION_ANNOTATED
-                params = {
-                    "chr": chr_name,
-                    "start": region_start,
-                    "end": region_end,
-                }
+                query = Q.FETCH_VARIANTS_REGION_ANNOTATED
+                params = {"chr": chr_name, "start": region_start, "end": region_end}
             else:
-                query = FETCH_VARIANTS_BY_CHR_ANNOTATED
+                query = Q.FETCH_VARIANTS_BY_CHR_ANNOTATED
                 params = {"chr": chr_name}
             params.update(self._filter.get_annotation_filter_params())
-        elif self._filter.has_cadd_filter():
+        else:  # CADD filter
             if use_region:
-                query = FETCH_VARIANTS_REGION_CADD
-                params = {
-                    "chr": chr_name,
-                    "start": region_start,
-                    "end": region_end,
-                }
+                query = Q.FETCH_VARIANTS_REGION_CADD
+                params = {"chr": chr_name, "start": region_start, "end": region_end}
             else:
-                query = FETCH_VARIANTS_BY_CHR_CADD
-                params = {"chr": chr_name}
-        else:
-            if use_region:
-                query = FETCH_VARIANTS_REGION
-                params = {
-                    "chr": chr_name,
-                    "start": region_start,
-                    "end": region_end,
-                }
-            else:
-                query = FETCH_VARIANTS_BY_CHR
+                query = Q.FETCH_VARIANTS_BY_CHR_CADD
                 params = {"chr": chr_name}
 
-        # fetch_size=500 ensures Neo4j pushes records in small batches, keeping
-        # the Bolt TCP connection active during long per-chromosome scans.
         with self._conn.driver.session(fetch_size=500) as session:
             result = session.run(query, params)
             for record in result:
                 props = dict(record["v"])
                 if self._filter.variant_passes(props):
                     yield props
+
+    # Keep backward-compatible alias for exporters that already use this name
+    def _iter_variants_fast(
+        self, chr_name: str, *, ordered: bool = True, **kwargs
+    ) -> Iterator[dict]:
+        """Backward-compatible alias — delegates to _iter_variants."""
+        return self._iter_variants(
+            chr_name, need_genotypes=False, need_order=ordered, **kwargs
+        )
 
     def _unpack_variant_genotypes(
         self, variant_props: dict, packed_indices: np.ndarray
@@ -281,6 +364,80 @@ class BaseExporter(ABC):
 
         af_info = recalculate_af_from_genotypes(gt_codes, ploidy_flags)
         return {**props, **af_info}
+
+    def write_manifest(self, output: Path, summary: ExportSummary) -> Path:
+        """Write a JSON manifest sidecar file alongside the export output.
+
+        The manifest documents what was exported, when, with which filters,
+        enabling reproducibility without forensic reconstruction.
+
+        Args:
+            output: The export output file path.
+            summary: The ExportSummary returned by export().
+
+        Returns:
+            Path to the written manifest file.
+        """
+        from graphmana.config import GRAPHMANA_VERSION
+
+        manifest = {
+            "graphmana_version": GRAPHMANA_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "output_file": str(output),
+            "format": summary.get("format", "unknown"),
+            "n_variants": summary.get("n_variants", 0),
+            "n_samples": summary.get("n_samples", 0),
+            "chromosomes": summary.get("chromosomes", []),
+            "filters": {},
+        }
+
+        # Record active filters
+        cfg = self._filter_config
+        if cfg.populations:
+            manifest["filters"]["populations"] = cfg.populations
+        if cfg.chromosomes:
+            manifest["filters"]["chromosomes"] = cfg.chromosomes
+        if cfg.region:
+            manifest["filters"]["region"] = cfg.region
+        if cfg.variant_types:
+            manifest["filters"]["variant_types"] = sorted(cfg.variant_types)
+        if cfg.maf_min is not None:
+            manifest["filters"]["maf_min"] = cfg.maf_min
+        if cfg.maf_max is not None:
+            manifest["filters"]["maf_max"] = cfg.maf_max
+        if cfg.min_call_rate is not None:
+            manifest["filters"]["min_call_rate"] = cfg.min_call_rate
+        if cfg.cohort:
+            manifest["filters"]["cohort"] = cfg.cohort
+        if cfg.sample_ids:
+            manifest["filters"]["n_sample_ids"] = len(cfg.sample_ids)
+        if cfg.consequences:
+            manifest["filters"]["consequences"] = cfg.consequences
+        if cfg.impacts:
+            manifest["filters"]["impacts"] = cfg.impacts
+        if cfg.genes:
+            manifest["filters"]["genes"] = cfg.genes
+        if cfg.cadd_min is not None:
+            manifest["filters"]["cadd_min"] = cfg.cadd_min
+        if cfg.annotation_version:
+            manifest["filters"]["annotation_version"] = cfg.annotation_version
+        if cfg.sv_types:
+            manifest["filters"]["sv_types"] = sorted(cfg.sv_types)
+        if cfg.liftover_status:
+            manifest["filters"]["liftover_status"] = cfg.liftover_status
+        if cfg.cadd_max is not None:
+            manifest["filters"]["cadd_max"] = cfg.cadd_max
+
+        manifest["recalculate_af"] = self._recalculate_af
+        manifest["threads"] = self._threads
+
+        manifest_path = Path(str(output) + ".manifest.json")
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2, default=str)
+
+        logger.info("Manifest written: %s", manifest_path)
+        return manifest_path
 
     @abstractmethod
     def export(self, output: Path, **kwargs) -> ExportSummary:
