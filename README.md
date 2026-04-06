@@ -2,7 +2,7 @@
 
 **Graph-native data management platform for variant genomics.**
 
-GraphMana stores VCF/GVCF data as a persistent, queryable Neo4j graph with packed genotype arrays on Variant nodes, pre-computed population statistics, incremental sample addition, integrated functional annotations, cohort management, reference genome liftover, annotation versioning, and multi-format export. Target scale: 100--50,000 samples on a single machine or HPC cluster node.
+GraphMana stores VCF/GVCF data as a persistent, queryable graph database with packed genotype arrays on Variant nodes, pre-computed population statistics, incremental sample addition, integrated functional annotations, cohort management, reference genome liftover, annotation versioning, and multi-format export. Target scale: 100--50,000 samples on a single machine or HPC cluster node.
 
 ## Key Features
 
@@ -27,7 +27,7 @@ cd GraphMana
 docker compose up --build
 ```
 
-This builds an all-in-one image with Neo4j, the Java plugin, the Python CLI, and a demo dataset (100 SNPs on chr22, 20 samples, 4 populations). The demo data is automatically loaded on first start.
+This builds an all-in-one image with Neo4j graph database, the Java plugin, the Python CLI, and a demo dataset (100 SNPs on chr22, 20 samples, 4 populations). The demo data is automatically loaded on first start.
 
 - Neo4j Browser: http://localhost:7474 (neo4j/graphmana)
 - Bolt endpoint: bolt://localhost:7687
