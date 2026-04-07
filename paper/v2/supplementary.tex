@@ -1,0 +1,408 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{caption}
+
+\definecolor{titleblue}{RGB}{33,102,172}
+\captionsetup{font=small, labelfont=bf}
+\onehalfspacing
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!5},
+  keywordstyle=\color{blue},
+  stringstyle=\color{red!70!black},
+}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{titleblue} Supplementary Materials}\\[6pt]
+{\large GraphMana: graph-native data management for population genomics projects}\\[4pt]
+{\normalsize Jianfeng Mao}
+\end{center}
+
+\tableofcontents
+\newpage
+
+%% ======================================================================
+\section{Supplementary Figure 1: CLI Command Hierarchy}
+
+The 58 GraphMana CLI commands are organized into 9 functional domains and 27 function groups,
+covering the full data management lifecycle.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig_cli_tree.pdf}
+\caption{GraphMana CLI command hierarchy. Each command is accessible as
+\texttt{graphmana <command>} with built-in help (\texttt{-{}-help}).
+No programming knowledge is required.}
+\end{figure}
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Figure 2: Export Manifest Example}
+
+Each export automatically generates a \texttt{.manifest.json} sidecar file.
+The example below shows the manifest produced by:
+
+\begin{lstlisting}[language=bash]
+graphmana export --format eigenstrat \
+    --populations CEU --populations GBR \
+    --populations FIN --populations IBS --populations TSI \
+    --chromosomes chr22 --filter-maf-min 0.05 \
+    --output european_cohort.eigenstrat
+\end{lstlisting}
+
+\vspace{6pt}
+Resulting manifest (\texttt{european\_cohort.eigenstrat.manifest.json}):
+
+\begin{lstlisting}
+{
+  "graphmana_version": "1.0.0-dev",
+  "timestamp": "2026-03-30T14:22:07.831042+00:00",
+  "output_file": "european_cohort.eigenstrat",
+  "format": "eigenstrat",
+  "n_variants": 439609,
+  "n_samples": 633,
+  "chromosomes": ["chr22"],
+  "filters": {
+    "populations": ["CEU", "GBR", "FIN", "IBS", "TSI"],
+    "maf_min": 0.05,
+    "chromosomes": ["chr22"]
+  },
+  "recalculate_af": true,
+  "threads": 1
+}
+\end{lstlisting}
+
+The manifest records the exact software version, timestamp, output format,
+variant and sample counts, and all active filter parameters---enabling any
+collaborator to verify or reproduce the extraction.
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Table 4: Downstream Tool Compatibility}
+
+Exported from GraphMana 1KGP database (chromosome 22, 3,202 samples, 1,066,557 variants).
+
+\subsection*{Tier 1: Fully validated against downstream tools}
+
+\begin{table}[h]
+\caption{Tier 1 formats validated by loading output into target tools.}
+\begin{tabular}{@{}llllrl@{}}
+\toprule
+Format & Path & Downstream Tool & Variants & Samples & Result \\
+\midrule
+VCF (BGZF) & FULL & bcftools 1.19 & 1,035,839 & 3,202 & PASS \\
+PLINK 1.9 & FULL & PLINK v1.9.0-b.8 & 439,609 & 3,202 & PASS \\
+PLINK 1.9 & FULL & PLINK v2.0.0 & 439,609 & 3,202 & PASS \\
+EIGENSTRAT & FULL & EIGENSOFT convertf & 925,730 & 3,202 & PASS \\
+TreeMix & FAST & TreeMix v1.13 & 1,066,557 & 26 pops & PASS \\
+SFS dadi & FAST & format spec & 1,066,557 & 2 pops & PASS \\
+SFS fsc & FAST & format spec & 1,066,557 & 2 pops & PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Tier 2: Format-specification validated}
+
+\begin{table}[h]
+\caption{Tier 2 formats verified against published format specifications.}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Format & Path & Validation & Result \\
+\midrule
+BED & FAST & 3+ columns, 0-based coordinates & PASS (1,066,557) \\
+TSV & FAST & Header + consistent columns & PASS (7 columns) \\
+JSON Lines & FAST & Each line valid JSON & PASS (1,066,557) \\
+PLINK 2.0 & FULL & Structure check & PASS \\
+STRUCTURE & FULL & Matrix format check & PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Tier 3: Functional exports (pending external validation)}
+
+Beagle, Genepop, Haplotype, BGEN, GDS, Zarr --- all FULL PATH exports that
+produce output files and pass internal tests but have not yet been validated
+against their target downstream tool pipelines.
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Table 5: Correctness Validation Matrix}
+
+\subsection*{Variant type support}
+
+\begin{table}[h]
+\caption{Variant type import/export correctness.}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+Variant Type & Import & Storage & VCF & PLINK & EIGENSTRAT \\
+\midrule
+Biallelic SNP & PASS & PASS & PASS & PASS & PASS \\
+Biallelic indel & PASS & PASS & PASS & excluded & PASS \\
+Multi-allelic & PASS & PASS & PASS$^{*}$ & excluded & excluded \\
+Structural variant & PASS & PASS & PASS & excluded & excluded \\
+Breakend (BND) & PASS & PASS & PASS & excluded & excluded \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize $^{*}$Decomposed to biallelic at import; reconstructed to multi-allelic at VCF export.}
+\end{tabular}
+\end{table}
+
+\subsection*{Genotype state fidelity}
+
+\begin{table}[h]
+\caption{All four genotype states correctly encoded and roundtripped.}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+State & Code & Import & VCF Roundtrip & PLINK & EIGENSTRAT \\
+\midrule
+Homozygous ref (0/0) & 00 & PASS & PASS & PASS & PASS \\
+Heterozygous (0/1) & 01 & PASS & PASS & PASS & PASS \\
+Homozygous alt (1/1) & 10 & PASS & PASS & PASS & PASS \\
+Missing (./.) & 11 & PASS & PASS & PASS & PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Phasing, ploidy, and annotation independence}
+
+\begin{table}[h]
+\caption{Additional correctness dimensions.}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Feature & Result & Notes \\
+\midrule
+Phased genotypes & PASS & Per-sample per-variant in phase\_packed \\
+Unphased genotypes & PASS & Default output mode \\
+Diploid samples & PASS & Default ploidy \\
+Haploid samples & PASS & Tracked in ploidy\_packed \\
+Annotation add/update/remove & PASS & Genotype layer unaffected \\
+Sample order after incremental add & PASS & packed\_index immutable \\
+VCF roundtrip (5 samples) & 99.999\%+ & 2--8 mismatches at multi-allelic sites \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Test suite coverage}
+
+162 tests directly relevant to data correctness, organized across 10 categories
+(genotype packing, phase convention, byte boundaries, missing data, incremental
+extension, export contracts, export integration, soft-delete, population arrays,
+CSV round-trip). All 1,439 tests in the full suite pass.
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Table 1: Detailed Benchmark Results}
+
+Chr22, 1.07M variants, 3,202 samples. All timings in seconds (wall clock).
+
+\subsection*{Benchmark 1: Incremental sample addition (3 batches of 234 samples)}
+
+\begin{table}[h]
+\caption{Incremental addition: GraphMana CSV-to-CSV rebuild vs.\ bcftools merge.}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Operation & GraphMana (s) & bcftools (s) \\
+\midrule
+Initial import / base copy & 602 & --- \\
+Batch 1 & 418 & 117 \\
+Batch 2 & 412 & 125 \\
+Batch 3 & 424 & 133 \\
+\textbf{Total} & \textbf{1,856} & \textbf{374} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Benchmark 2: Cohort VCF extraction (5 superpopulation cohorts)}
+
+\begin{table}[h]
+\caption{Cohort-specific VCF extraction timings.}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Cohort ($N$ samples) & GraphMana (s) & bcftools (s) \\
+\midrule
+AFR (893) & 191 & 59 \\
+EUR (633) & 211 & 51 \\
+EAS (585) & 131 & 49 \\
+EUR+EAS (1,218) & 238 & 64 \\
+ALL (3,202) & 571 & 110 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Benchmark 3: Multi-format export}
+
+\begin{table}[h]
+\caption{Multi-format export: 6 formats from single database vs.\ VCF only for bcftools.}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Format & GraphMana (s) & bcftools (s) \\
+\midrule
+VCF & 473 & 96 \\
+TreeMix & 189 & N/A \\
+SFS (dadi) & 86 & N/A \\
+SFS (fsc) & 119 & N/A \\
+BED & 84 & N/A \\
+TSV & 85 & N/A \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Benchmark 4: Annotation update (53,000 BED regions)}
+
+GraphMana in-place update: \textbf{3.5~s}. bcftools VCF rewrite: 96~s.
+Speedup: \textbf{27$\times$}.
+
+\subsection*{Benchmark 5: Full lifecycle simulation}
+
+GraphMana: 5,880~s (98~min), \textbf{46 of 46 operations completed}.
+bcftools: 1,006~s (17~min), 17 of 26 operations completed (9 have no equivalent).
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Table 2: Whole-Genome Benchmarks}
+
+70.7M variants, 3,202 samples, 26 populations.
+
+\begin{table}[h]
+\caption{Whole-genome export timings.}
+\begin{tabular}{@{}llrrr@{}}
+\toprule
+Format & Path & Variants & Wall time & Size \\
+\midrule
+TreeMix & FAST & 70,692,015 & 102 min & 780 MB \\
+SFS dadi & FAST & 70,692,015 & 98 min & 5.7 KB \\
+SFS fsc & FAST & 70,692,015 & 101 min & 1.3 KB \\
+BED & FAST & 70,692,007 & 103 min & 2.9 GB \\
+TSV & FAST & 70,692,007 & 101 min & 3.8 GB \\
+PLINK 1.9 (8 threads) & FULL & 9,627,636 & 156 s & 7.2 GB \\
+VCF (BGZF) & FULL & 68,912,619 & 3.7 hr & 14 GB \\
+EIGENSTRAT & FULL & 61,599,149 & 3.7 hr & 184 GB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Whole-genome incremental addition (234 samples added)}
+
+\begin{table}[h]
+\caption{CSV-to-CSV rebuild timing breakdown.}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Step & Time \\
+\midrule
+VCF parsing (chr22 batch) & 3 min \\
+CSV read + extend + write (70.7M variants, 214 GB) & 160 min \\
+neo4j-admin import & 15 min \\
+Database restart + indexes & 4 min \\
+\textbf{Total} & \textbf{182 min} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Table 3: Storage and Performance Scaling}
+
+\begin{table}[h]
+\caption{Storage estimates for whole-genome data ($\sim$85M biallelic variants).}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Component & 3,202 & 10,000 & 50,000 & 200,000 & 500,000 \\
+\midrule
+gt\_packed & 68 GB & 213 GB & 1.0 TB & 4.3 TB & 10.6 TB \\
+phase\_packed & 34 GB & 106 GB & 0.5 TB & 2.1 TB & 5.3 TB \\
+Pop arrays & 17 GB & 17 GB & 17 GB & 17 GB & 17 GB \\
+NEXT edges & 4 GB & 4 GB & 4 GB & 4 GB & 4 GB \\
+Annotations & 10--50 GB & 10--50 GB & 10--50 GB & 10--50 GB & 10--50 GB \\
+\textbf{Total} & \textbf{130--200 GB} & \textbf{400--550 GB} & \textbf{2--3 TB} & \textbf{8--10 TB} & \textbf{20--25 TB} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\caption{Performance scaling by access path.}
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Operation & Scaling & 3,202 & 10,000 & 50,000 & 500,000 \\
+\midrule
+FAST PATH & $O(K)$ & Seconds & Seconds & Seconds & Seconds \\
+FULL PATH & $O(N)$ & Minutes & Min--hr & Hr--days & Days--wk \\
+Incremental (WGS) & $O(M \times N)$ & 182 min & Hours & Many hr & Days \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+%% ======================================================================
+\section{Supplementary Note 3: Concrete Workflow Example}
+
+This example demonstrates a typical multi-day workflow using GraphMana.
+
+\subsection*{Day 1: Initial import}
+\begin{lstlisting}[language=bash]
+graphmana setup-neo4j --install-dir ~/neo4j --memory-auto
+graphmana ingest --input data/1kgp_chr*.vcf.gz \
+    --population-map data/panel.tsv \
+    --neo4j-home ~/neo4j --auto-start-neo4j --threads 16
+graphmana status --detailed
+\end{lstlisting}
+
+\subsection*{Day 2: Incremental addition}
+\begin{lstlisting}[language=bash]
+graphmana save-state --output checkpoints/before_batch2.json
+graphmana ingest --input data/batch2.vcf.gz \
+    --population-map data/batch2_panel.tsv --mode incremental \
+    --neo4j-home ~/neo4j --auto-start-neo4j
+graphmana diff --snapshot checkpoints/before_batch2.json
+\end{lstlisting}
+
+\subsection*{Day 3: Multi-format export}
+\begin{lstlisting}[language=bash]
+graphmana export --format eigenstrat --output exports/european \
+    --populations CEU --populations GBR --filter-maf-min 0.05
+graphmana export --format treemix --output exports/tree.treemix.gz
+graphmana export --format sfs-dadi --output exports/yri_ceu.fs \
+    --sfs-populations YRI --sfs-populations CEU \
+    --sfs-projection 20 --sfs-projection 20 --sfs-folded
+\end{lstlisting}
+
+\subsection*{Day 4: Annotation update}
+\begin{lstlisting}[language=bash]
+graphmana annotate load-clinvar \
+    --input annotations/clinvar_20260401.vcf.gz --version ClinVar_2026-04
+graphmana db validate
+\end{lstlisting}
+
+\subsection*{Day 5: QC and provenance}
+\begin{lstlisting}[language=bash]
+graphmana qc --type all --output reports/qc.html --format html
+graphmana ref-check --fasta genomes/GRCh38.fa --chromosomes chr22
+graphmana provenance search --since 2026-04-01 --until 2026-04-05
+\end{lstlisting}
+
+No file regeneration was needed across the five days. Each export produced a
+\texttt{.manifest.json} sidecar. The annotation update did not affect
+genotype data. The \texttt{diff} command showed exactly what changed after
+incremental addition.
+
+\end{document}

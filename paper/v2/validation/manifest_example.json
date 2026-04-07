@@ -1,0 +1,26 @@
+{
+  "graphmana_version": "1.0.0-dev",
+  "timestamp": "2026-03-30T14:22:07.831042+00:00",
+  "output_file": "european_cohort.eigenstrat",
+  "format": "eigenstrat",
+  "n_variants": 439609,
+  "n_samples": 633,
+  "chromosomes": [
+    "chr22"
+  ],
+  "filters": {
+    "populations": [
+      "CEU",
+      "GBR",
+      "FIN",
+      "IBS",
+      "TSI"
+    ],
+    "maf_min": 0.05,
+    "chromosomes": [
+      "chr22"
+    ]
+  },
+  "recalculate_af": true,
+  "threads": 1
+}
