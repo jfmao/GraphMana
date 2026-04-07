@@ -106,14 +106,31 @@ class PLINK2Exporter(BaseExporter):
             for sample in samples:
                 f.write(format_psam_line(sample) + "\n")
 
-        # Pass 1: Write .pvar, count variants
-        n_variants = 0
+        # Single pass: collect .pvar lines and genotype data, then write both.
+        # PgenWriter requires variant_ct upfront, so we buffer variant data
+        # in memory for the .pgen write. For chr22-scale data (~1M variants)
+        # this requires ~3 GB RAM (1M x 3202 x 1 byte); for whole-genome,
+        # consider the PLINK 1.9 export + plink2 --make-pgen conversion path.
+        pvar_lines = []
+        gt_buffer = []
+
+        for chrom in target_chroms:
+            for props in self._iter_variants(chrom):
+                pvar_lines.append(format_pvar_line(props))
+                gt_codes, _, ploidy_flags = self._unpack_variant_genotypes(
+                    props, packed_indices
+                )
+                props = self._maybe_recalculate_af(props, gt_codes, ploidy_flags)
+                gt_buffer.append(gt_codes.astype(np.int32))
+
+        n_variants = len(pvar_lines)
+
+        # Write .pvar
+        stem.parent.mkdir(parents=True, exist_ok=True)
         with open(pvar_path, "w") as f:
             f.write("#CHROM\tPOS\tID\tREF\tALT\n")
-            for chrom in target_chroms:
-                for props in self._iter_variants(chrom):
-                    f.write(format_pvar_line(props) + "\n")
-                    n_variants += 1
+            for line in pvar_lines:
+                f.write(line + "\n")
 
         if n_variants == 0:
             logger.warning("No variants to export")
@@ -125,7 +142,7 @@ class PLINK2Exporter(BaseExporter):
                 "files": [str(pgen_path), str(pvar_path), str(psam_path)],
             }
 
-        # Pass 2: Write .pgen
+        # Write .pgen
         writer = pgenlib.PgenWriter(
             filename=bytes(str(pgen_path), "utf-8"),
             sample_ct=n_samples,
@@ -133,14 +150,8 @@ class PLINK2Exporter(BaseExporter):
             nonref_flags=False,
         )
         try:
-            for chrom in target_chroms:
-                for props in self._iter_variants(chrom):
-                    gt_codes, _, ploidy_flags = self._unpack_variant_genotypes(
-                        props, packed_indices
-                    )
-                    props = self._maybe_recalculate_af(props, gt_codes, ploidy_flags)
-                    # pgenlib expects int32 array with values 0-3
-                    writer.append_biallelic(gt_codes.astype(np.int32))
+            for gt_row in gt_buffer:
+                writer.append_biallelic(gt_row)
         finally:
             writer.close()
 
