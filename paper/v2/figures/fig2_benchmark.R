@@ -33,7 +33,7 @@ if (length(script_arg) > 0) {
 } else {
   script_dir <- "paper/figures"
 }
-data_file  <- normalizePath(file.path(script_dir, "../../benchmarks/results/comprehensive_comprehensive.jsonl"))
+data_file  <- normalizePath(file.path(script_dir, "../../../benchmarks/results/comprehensive_comprehensive.jsonl"))
 out_dir    <- script_dir
 
 # --- Colors ---
@@ -259,11 +259,11 @@ panel_c <- ggplot(formats, aes(x = col, y = -row)) +
 # ==========================================================================
 
 fig <- ggarrange(
-  panel_a, panel_b, panel_c,
-  ncol = 1, nrow = 3,
-  labels = c("a", "b", "c"),
+  panel_a, panel_b,
+  ncol = 1, nrow = 2,
+  labels = c("a", "b"),
   font.label = list(size = 11, face = "bold"),
-  heights = c(1, 1.3, 0.9)
+  heights = c(1, 1.3)
 )
 
 # Title
@@ -275,7 +275,7 @@ fig <- annotate_figure(fig,
 # Save with white background
 out_pdf <- file.path(out_dir, "fig2_benchmark_ggplot.pdf")
 out_png <- file.path(out_dir, "fig2_benchmark_ggplot.png")
-ggsave(out_pdf, fig, width = 180, height = 230, units = "mm", dpi = 300, bg = "white")
-ggsave(out_png, fig, width = 180, height = 230, units = "mm", dpi = 300, bg = "white")
+ggsave(out_pdf, fig, width = 180, height = 160, units = "mm", dpi = 300, bg = "white")
+ggsave(out_png, fig, width = 180, height = 160, units = "mm", dpi = 300, bg = "white")
 cat("Saved:", out_pdf, "\n")
 cat("Saved:", out_png, "\n")
