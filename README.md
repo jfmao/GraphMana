@@ -172,6 +172,12 @@ GraphMana is built on graph database technology (currently Neo4j Community Editi
 - **Python CLI**: Python 3.11+, cyvcf2, numpy, Click (21,267 lines)
 - **Testing**: 1,439 unit and integration tests (pytest)
 
+## Data and Benchmarks
+
+Benchmark data and a pre-built 1000 Genomes Project chr22 database (3,202 samples, 1.07M variants) are deposited at Zenodo:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19472836.svg)](https://doi.org/10.5281/zenodo.19472836)
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
