@@ -86,3 +86,4 @@ desktop.ini
 # Environment
 .env
 .env.local
+paper/
