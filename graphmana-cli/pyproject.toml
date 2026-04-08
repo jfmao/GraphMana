@@ -1,14 +1,26 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphmana"
-version = "0.1.0"
-description = "Graph-native data management platform for variant genomics"
+version = "1.0.0"
+description = "Graph-native data management platform for population genomics"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "click>=8.1",
     "neo4j>=5.0",
@@ -23,12 +35,30 @@ dev = [
     "ruff>=0.4",
     "black>=24.0",
 ]
+plink2 = [
+    "pgenlib>=0.90",
+]
+zarr = [
+    "zarr>=2.16",
+]
+gds = [
+    "h5py>=3.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/jfmao/GraphMana"
+Documentation = "https://github.com/jfmao/GraphMana/tree/main/docs"
+Repository = "https://github.com/jfmao/GraphMana"
+Issues = "https://github.com/jfmao/GraphMana/issues"
 
 [project.scripts]
 graphmana = "graphmana.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+graphmana = ["data/*.jar"]
 
 [tool.black]
 line-length = 100

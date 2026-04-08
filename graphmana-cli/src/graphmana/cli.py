@@ -3015,11 +3015,34 @@ def ref_check(
     help="Auto-set heap and page cache based on available RAM.",
 )
 @click.option("--verbose/--quiet", default=False, help="Verbose logging.")
-def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose):
-    """Download and configure Neo4j for user-space operation."""
+@click.option(
+    "--install-java",
+    is_flag=True,
+    help="Download Eclipse Temurin JDK 21 to user space (no admin needed).",
+)
+def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose, install_java):
+    """Download and configure Neo4j for user-space operation.
+
+    Automatically deploys the bundled GraphMana procedures JAR to the
+    Neo4j plugins directory. Use --install-java to also download a JDK
+    if Java 21+ is not already installed.
+    """
     _setup_logging(verbose)
 
     try:
+        # Optionally install Java first
+        if install_java:
+            from graphmana.cluster.neo4j_lifecycle import download_java
+
+            java_bin = download_java(install_dir)
+            # Add to PATH for the current process
+            import os
+
+            java_home = java_bin.parent.parent
+            os.environ["JAVA_HOME"] = str(java_home)
+            os.environ["PATH"] = f"{java_bin.parent}:{os.environ.get('PATH', '')}"
+            click.echo(f"JDK 21 installed at: {java_home}")
+
         from graphmana.cluster.neo4j_lifecycle import setup_neo4j as _setup
 
         result = _setup(
@@ -3033,6 +3056,7 @@ def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose):
         click.echo(f"  Home:         {result['neo4j_home']}")
         click.echo(f"  Data dir:     {result['data_dir']}")
         click.echo(f"  Java:         {result['java_version']}")
+        click.echo(f"  Procedures:   JAR deployed to plugins/")
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

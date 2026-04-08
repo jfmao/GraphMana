@@ -100,6 +100,9 @@ def setup_neo4j(
         if script.is_file() and not script.suffix:
             script.chmod(script.stat().st_mode | 0o755)
 
+    # Deploy bundled GraphMana procedures JAR to plugins/
+    _deploy_procedures_jar(neo4j_home)
+
     logger.info("Neo4j %s ready at %s", version, neo4j_home)
 
     return {
@@ -389,3 +392,123 @@ def _wait_for_neo4j(neo4j_home: Path, *, timeout: int = 120) -> str:
     raise RuntimeError(
         f"Neo4j did not become ready within {timeout}s. " f"Check logs at {neo4j_home / 'logs'}"
     )
+
+
+# ---------------------------------------------------------------------------
+# JAR deployment
+# ---------------------------------------------------------------------------
+
+
+def _deploy_procedures_jar(neo4j_home: Path) -> None:
+    """Copy the bundled GraphMana procedures JAR to Neo4j plugins directory."""
+    try:
+        from graphmana.data import get_procedures_jar
+
+        jar_src = get_procedures_jar()
+    except (ImportError, FileNotFoundError):
+        logger.info("No bundled procedures JAR found; skipping plugin deployment")
+        return
+
+    plugins_dir = neo4j_home / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    jar_dest = plugins_dir / "graphmana-procedures.jar"
+
+    if jar_dest.exists():
+        # Check if the bundled version is newer
+        if jar_src.stat().st_size == jar_dest.stat().st_size:
+            logger.info("Procedures JAR already deployed (same size)")
+            return
+
+    shutil.copy2(jar_src, jar_dest)
+    logger.info("Deployed procedures JAR to %s", jar_dest)
+
+
+# ---------------------------------------------------------------------------
+# Java download (user-space, no admin required)
+# ---------------------------------------------------------------------------
+
+# Eclipse Temurin JDK 21 download URLs
+_TEMURIN_URLS = {
+    "linux-x64": "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse",
+    "linux-aarch64": "https://api.adoptium.net/v3/binary/latest/21/ga/linux/aarch64/jdk/hotspot/normal/eclipse",
+    "mac-x64": "https://api.adoptium.net/v3/binary/latest/21/ga/mac/x64/jdk/hotspot/normal/eclipse",
+    "mac-aarch64": "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse",
+}
+
+
+def _detect_platform() -> str:
+    """Detect platform as 'os-arch' for Temurin download."""
+    import platform as plat
+
+    system = plat.system().lower()
+    machine = plat.machine().lower()
+
+    if system == "darwin":
+        system = "mac"
+
+    if machine in ("x86_64", "amd64"):
+        arch = "x64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "aarch64"
+    else:
+        arch = machine
+
+    return f"{system}-{arch}"
+
+
+def download_java(install_dir: str | Path) -> Path:
+    """Download Eclipse Temurin JDK 21 to user space (no admin required).
+
+    Args:
+        install_dir: Directory where the JDK will be extracted.
+
+    Returns:
+        Path to the java binary.
+
+    Raises:
+        RuntimeError: If platform is not supported or download fails.
+    """
+    install_dir = Path(install_dir)
+    install_dir.mkdir(parents=True, exist_ok=True)
+
+    platform_key = _detect_platform()
+    if platform_key not in _TEMURIN_URLS:
+        raise RuntimeError(
+            f"Unsupported platform '{platform_key}'. "
+            f"Supported: {', '.join(_TEMURIN_URLS.keys())}"
+        )
+
+    # Check if already downloaded
+    existing_jdks = list(install_dir.glob("jdk-21*"))
+    if existing_jdks:
+        java_bin = existing_jdks[0] / "bin" / "java"
+        if java_bin.exists():
+            logger.info("JDK already present at %s", existing_jdks[0])
+            return java_bin
+
+    url = _TEMURIN_URLS[platform_key]
+    tarball_path = install_dir / "temurin-jdk21.tar.gz"
+
+    logger.info("Downloading Eclipse Temurin JDK 21 for %s ...", platform_key)
+    _download_file(url, tarball_path)
+
+    logger.info("Extracting JDK to %s ...", install_dir)
+    with tarfile.open(tarball_path, "r:gz") as tar:
+        tar.extractall(path=install_dir)
+
+    tarball_path.unlink(missing_ok=True)
+
+    # Find the extracted directory
+    jdk_dirs = list(install_dir.glob("jdk-21*"))
+    if not jdk_dirs:
+        raise RuntimeError("JDK extraction failed — no jdk-21* directory found")
+
+    java_bin = jdk_dirs[0] / "bin" / "java"
+    if not java_bin.exists():
+        raise RuntimeError(f"Java binary not found at {java_bin}")
+
+    # Make executable
+    java_bin.chmod(java_bin.stat().st_mode | 0o755)
+
+    logger.info("JDK 21 installed at %s", jdk_dirs[0])
+    return java_bin

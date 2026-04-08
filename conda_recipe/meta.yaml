@@ -1,0 +1,57 @@
+{% set name = "graphmana" %}
+{% set version = "1.0.0" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  path: ../graphmana-cli
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps -vv
+  entry_points:
+    - graphmana = graphmana.cli:cli
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+    - setuptools >=68.0
+  run:
+    - python >=3.11
+    - click >=8.1
+    - python-neo4j >=5.0
+    - cyvcf2 >=0.30
+    - numpy >=1.24
+    - pyliftover >=0.4
+    - openjdk >=21
+
+test:
+  imports:
+    - graphmana
+    - graphmana.cli
+    - graphmana.data
+  commands:
+    - graphmana --help
+    - graphmana version
+    - graphmana list-formats
+
+about:
+  home: https://github.com/jfmao/GraphMana
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: Graph-native data management platform for population genomics
+  description: |
+    GraphMana stores variant data in a graph database as packed genotype
+    arrays with pre-computed population statistics, enabling incremental
+    sample addition, provenance tracking, cohort management, and export
+    to 17 population genetics formats from a single persistent source.
+  dev_url: https://github.com/jfmao/GraphMana
+
+extra:
+  recipe-maintainers:
+    - jfmao
