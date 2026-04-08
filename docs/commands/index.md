@@ -89,6 +89,11 @@ For narrative tutorials and workflows, see the [Vignettes](../vignettes/).
 | [graphmana provenance search](graphmana-provenance-search.md) | Search logs by date or dataset |
 | [graphmana migrate](graphmana-migrate.md) | Apply schema migrations |
 
+### Installation
+
+For detailed installation instructions (pip, conda, Docker, HPC), see the
+**[Installation Guide](../INSTALL.md)**.
+
 ### Setup and Infrastructure
 
 | Command | Description |

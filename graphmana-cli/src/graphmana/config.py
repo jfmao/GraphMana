@@ -8,7 +8,7 @@ DEFAULT_NEO4J_USER = "neo4j"
 DEFAULT_NEO4J_PASSWORD = os.environ.get("GRAPHMANA_NEO4J_PASSWORD", "graphmana")
 
 # Version
-GRAPHMANA_VERSION = "1.0.0-dev"
+GRAPHMANA_VERSION = "1.0.0"
 SCHEMA_VERSION = "0.1.0"
 
 # Processing defaults
