@@ -14,10 +14,12 @@ import numpy as np
 
 from graphmana.db import queries
 from graphmana.ingest.array_ops import (
+    extend_called_packed,
     extend_gt_packed,
     extend_phase_packed,
     extend_ploidy_packed,
     merge_pop_stats,
+    pad_called_for_new_variant,
     pad_gt_for_new_variant,
     pad_phase_for_new_variant,
 )
@@ -85,6 +87,13 @@ class IncrementalIngester:
     dataset_id: str
     source_file: str
     n_total_samples: int
+    # v1.1: when True, preserve the v1.0 "absent in input = HomRef" semantics
+    # for workflows with guaranteed fixed site lists (imputed panels, array
+    # genotyping). Default is False: the honest pop-gen-correct behavior that
+    # pads unseen samples as Missing and marks them as not-interrogated in
+    # called_packed, yielding correct per-site denominators for downstream
+    # allele-frequency estimators. See docs/gvcf-workflow.md.
+    assume_homref_on_missing: bool = False
 
     # Counters
     n_variants_extended: int = field(default=0, init=False)
@@ -434,11 +443,22 @@ class IncrementalIngester:
                 existing_ploidy = rec["ploidy_packed"]
                 if existing_ploidy is not None:
                     existing_ploidy = bytes(existing_ploidy)
+                # called_packed may be None on schema v1.0 databases — helpers
+                # interpret None as "all existing samples called".
+                existing_called = rec.get("called_packed") if hasattr(rec, "get") else rec["called_packed"]  # noqa: E501
+                if existing_called is not None:
+                    existing_called = bytes(existing_called)
+                existing_gt_encoding = (
+                    rec.get("gt_encoding") if hasattr(rec, "get") else rec["gt_encoding"]
+                )
 
                 # Extend packed arrays
                 new_gt = extend_gt_packed(existing_gt, n_existing, vdata.gt_types)
                 new_phase = extend_phase_packed(existing_phase, n_existing, vdata.phase_bits)
                 new_ploidy = extend_ploidy_packed(existing_ploidy, n_existing, vdata.ploidy_bits)
+                new_called = extend_called_packed(
+                    existing_called, n_existing, vdata.gt_types
+                )
 
                 # Merge population stats
                 existing_pop_ids = list(rec["pop_ids"]) if rec["pop_ids"] else []
@@ -470,6 +490,8 @@ class IncrementalIngester:
                         "gt_packed": bytearray(new_gt),
                         "phase_packed": bytearray(new_phase),
                         "ploidy_packed": bytearray(new_ploidy) if new_ploidy else None,
+                        "called_packed": bytearray(new_called),
+                        "gt_encoding": existing_gt_encoding or "dense",
                         "pop_ids": merged["pop_ids"],
                         "ac": merged["ac"],
                         "an": merged["an"],
@@ -501,22 +523,44 @@ class IncrementalIngester:
         variant_ids: list[str],
         n_new_samples: int,
     ) -> None:
-        """Extend variants not in new VCF with HomRef for all new samples."""
-        homref_gt = np.zeros(n_new_samples, dtype=np.int8)  # cyvcf2 code 0 = HomRef
+        """Extend variants not in new VCF for all new samples.
+
+        Two semantic modes:
+
+        * ``assume_homref_on_missing=True`` (legacy): new samples are padded
+          as HomRef and marked called; pop stats grow by ``an=2*n`` per pop.
+          Matches the v1.0 "absent = HomRef" assumption.
+        * ``assume_homref_on_missing=False`` (v1.1 default): the new VCF
+          carried no information about these variants for the new samples, so
+          they are padded as Missing, marked not-interrogated, and contribute
+          nothing to the per-pop ``an`` denominator. This preserves pop-gen
+          correctness across incremental batches with mismatched site lists.
+        """
+        if self.assume_homref_on_missing:
+            # Legacy: encode new samples as cyvcf2 HomRef (code 0), all called.
+            padding_gt = np.zeros(n_new_samples, dtype=np.int8)
+            new_an_per_pop = [
+                2 * self.pop_map_new.n_samples_per_pop[pid]
+                for pid in self.pop_map_new.pop_ids
+            ]
+        else:
+            # Honest: encode new samples as cyvcf2 Missing (code 2), uncalled.
+            padding_gt = np.full(n_new_samples, 2, dtype=np.int8)
+            new_an_per_pop = [0] * len(self.pop_map_new.pop_ids)
+
         zero_phase = np.zeros(n_new_samples, dtype=np.uint8)
         zero_ploidy = np.zeros(n_new_samples, dtype=np.uint8)
 
-        # HomRef pop stats for new samples: ac=0, an=2*n per pop, etc.
         new_pop_ids = self.pop_map_new.pop_ids
         new_ac = [0] * len(new_pop_ids)
-        new_an = [2 * self.pop_map_new.n_samples_per_pop[pid] for pid in new_pop_ids]
+        new_an = new_an_per_pop
         new_het = [0] * len(new_pop_ids)
         new_hom = [0] * len(new_pop_ids)
 
         def _tx(
             tx,
             variant_ids,
-            homref_gt,
+            padding_gt,
             zero_phase,
             zero_ploidy,
             new_pop_ids,
@@ -539,10 +583,17 @@ class IncrementalIngester:
                 existing_ploidy = rec["ploidy_packed"]
                 if existing_ploidy is not None:
                     existing_ploidy = bytes(existing_ploidy)
+                existing_called = rec["called_packed"]
+                if existing_called is not None:
+                    existing_called = bytes(existing_called)
+                existing_gt_encoding = rec["gt_encoding"]
 
-                new_gt_packed = extend_gt_packed(existing_gt, n_existing, homref_gt)
+                new_gt_packed = extend_gt_packed(existing_gt, n_existing, padding_gt)
                 new_phase_packed = extend_phase_packed(existing_phase, n_existing, zero_phase)
                 new_ploidy_packed = extend_ploidy_packed(existing_ploidy, n_existing, zero_ploidy)
+                new_called_packed = extend_called_packed(
+                    existing_called, n_existing, padding_gt
+                )
 
                 existing_pop_ids = list(rec["pop_ids"]) if rec["pop_ids"] else []
                 existing_ac = list(rec["ac"]) if rec["ac"] else []
@@ -574,6 +625,8 @@ class IncrementalIngester:
                         "ploidy_packed": (
                             bytearray(new_ploidy_packed) if new_ploidy_packed else None
                         ),
+                        "called_packed": bytearray(new_called_packed),
+                        "gt_encoding": existing_gt_encoding or "dense",
                         "pop_ids": merged["pop_ids"],
                         "ac": merged["ac"],
                         "an": merged["an"],
@@ -594,7 +647,7 @@ class IncrementalIngester:
         self.conn.execute_write_tx(
             _tx,
             variant_ids=variant_ids,
-            homref_gt=homref_gt,
+            padding_gt=padding_gt,
             zero_phase=zero_phase,
             zero_ploidy=zero_ploidy,
             new_pop_ids=new_pop_ids,
@@ -611,21 +664,38 @@ class IncrementalIngester:
         to_create: dict[str, _VariantData],
         chrom: str,
     ) -> None:
-        """Create brand-new Variant nodes with HomRef padding for existing samples."""
+        """Create brand-new Variant nodes introduced by the current batch.
+
+        By default (v1.1) existing samples are padded as Missing and marked
+        not-interrogated in ``called_packed``; they contribute zero to per-pop
+        ``an`` so allele frequencies are computed only over samples actually
+        measured at this site. When ``assume_homref_on_missing`` is set, the
+        legacy v1.0 semantics (HomRef padding, ``an=2*n``) are preserved.
+        """
         variants = []
         edges = []
+        assume_hr = self.assume_homref_on_missing
 
         for vid, vdata in to_create.items():
-            gt_packed = pad_gt_for_new_variant(self.n_existing, vdata.gt_types)
+            gt_packed = pad_gt_for_new_variant(
+                self.n_existing, vdata.gt_types, assume_homref=assume_hr
+            )
             phase_packed = pad_phase_for_new_variant(self.n_existing, vdata.phase_bits)
             ploidy_packed = extend_ploidy_packed(None, self.n_existing, vdata.ploidy_bits)
+            called_packed = pad_called_for_new_variant(
+                self.n_existing, vdata.gt_types, assume_homref=assume_hr
+            )
 
-            # For new variants, existing samples contribute HomRef to pop stats
-            # Build homref stats for existing populations
             existing_homref_ac = [0] * len(self.existing_pop_ids)
-            existing_homref_an = self._get_existing_pop_an()
             existing_homref_het = [0] * len(self.existing_pop_ids)
             existing_homref_hom = [0] * len(self.existing_pop_ids)
+            if assume_hr:
+                # Legacy: existing samples contribute an=2*n to their pops.
+                existing_homref_an = self._get_existing_pop_an()
+            else:
+                # Honest: existing samples were not interrogated at this new
+                # variant, so they contribute nothing to the denominator.
+                existing_homref_an = [0] * len(self.existing_pop_ids)
 
             merged = merge_pop_stats(
                 self.existing_pop_ids,
@@ -654,6 +724,8 @@ class IncrementalIngester:
                     "gt_packed": bytearray(gt_packed),
                     "phase_packed": bytearray(phase_packed),
                     "ploidy_packed": (bytearray(ploidy_packed) if ploidy_packed else None),
+                    "called_packed": bytearray(called_packed),
+                    "gt_encoding": "dense",
                     "pop_ids": merged["pop_ids"],
                     "ac": merged["ac"],
                     "an": merged["an"],

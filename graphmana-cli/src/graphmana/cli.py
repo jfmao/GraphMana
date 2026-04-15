@@ -678,6 +678,19 @@ def load_csv(
     help="Action when duplicate samples found (incremental mode).",
 )
 @click.option(
+    "--assume-homref-on-missing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Legacy mode: when a variant appears only in a later batch, pad "
+        "existing samples as HomRef rather than Missing. Use only for "
+        "workflows with a guaranteed fixed site list (imputed panels, "
+        "fixed-content arrays). Default is the pop-gen-correct behavior "
+        "that preserves the HomRef-vs-Missing distinction via "
+        "called_packed. See docs/gvcf-workflow.md."
+    ),
+)
+@click.option(
     "--include-filtered",
     is_flag=True,
     default=False,
@@ -722,6 +735,7 @@ def ingest(
     annotation_version,
     dataset_id,
     on_duplicate,
+    assume_homref_on_missing,
     include_filtered,
     verbose,
     dry_run,
@@ -805,6 +819,7 @@ def ingest(
                 database=database,
                 mode=mode,
                 on_duplicate=on_duplicate,
+                assume_homref_on_missing=assume_homref_on_missing,
                 stratify_by=stratify_by,
                 reference=reference,
                 ancestral_fasta=ancestral_fasta,

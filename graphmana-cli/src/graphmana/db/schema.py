@@ -1,8 +1,22 @@
-"""Schema creation — constraints, indexes, and metadata for the GraphMana graph."""
+"""Schema creation — constraints, indexes, and metadata for the GraphMana graph.
+
+Schema versions:
+    1.0 — initial release. Variant nodes carry gt_packed, phase_packed,
+          ploidy_packed and pre-computed population arrays.
+    1.1 — adds ``called_packed`` (1 bit per sample: 1=interrogated, 0=not looked
+          at) and ``gt_encoding`` ("dense" or "sparse_v1") on Variant nodes.
+          The called mask preserves the HomRef-vs-Missing distinction across
+          incremental batches; sparse encoding is an optional storage
+          optimization chosen per variant. Databases created before v1.1 are
+          forward-compatible: missing ``called_packed`` is treated as "all
+          samples called" and missing ``gt_encoding`` is treated as "dense".
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
+CURRENT_SCHEMA_VERSION = "1.1"
 
 CONSTRAINTS = [
     "CREATE CONSTRAINT variant_id IF NOT EXISTS FOR (v:Variant) REQUIRE v.variantId IS UNIQUE",
@@ -106,8 +120,8 @@ def create_schema(conn) -> dict:
 def create_schema_metadata(
     conn,
     *,
-    schema_version: str = "1",
-    graphmana_version: str = "0.1.0",
+    schema_version: str = CURRENT_SCHEMA_VERSION,
+    graphmana_version: str = "1.1.0",
     reference_genome: str = "unknown",
     chr_naming_style: str = "auto",
     n_samples: int = 0,

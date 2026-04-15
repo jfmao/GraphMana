@@ -10,11 +10,16 @@ import numpy as np
 
 from graphmana.ingest.genotype_packer import (
     GT_REMAP,
+    build_called_packed_all,
+    unpack_called_packed,
     unpack_genotypes,
     unpack_phase,
     unpack_ploidy,
     vectorized_gt_pack,
 )
+
+# Packed code for "looked and missing" / "not interrogated". See genotype_packer.
+_GT_CODE_MISSING = 3
 
 
 def _pack_codes_direct(codes: np.ndarray) -> bytes:
@@ -123,20 +128,108 @@ def extend_ploidy_packed(
 def pad_gt_for_new_variant(
     n_existing: int,
     new_gt_types: np.ndarray,
+    *,
+    assume_homref: bool = False,
 ) -> bytes:
-    """Create gt_packed for a NEW variant: n_existing HomRef + new samples.
+    """Create gt_packed for a NEW variant: n_existing padding + new samples.
+
+    By default, existing samples are padded with code 3 (Missing) because the
+    current input batch has no information about whether they are HomRef at
+    this site — marking them HomRef would silently bias allele frequencies
+    (see ``docs/gvcf-workflow.md``). Set ``assume_homref=True`` to recover the
+    legacy behaviour for workflows that guarantee a fixed site list (imputed
+    panels, array genotyping, etc.).
 
     Args:
-        n_existing: number of existing samples (get HomRef = code 0).
+        n_existing: number of existing samples (padded at the front).
         new_gt_types: int8 array of cyvcf2 genotype codes for new samples.
+        assume_homref: when True, pad existing samples as HomRef (code 0).
+            Default False pads as Missing (code 3).
 
     Returns:
         Packed gt bytes for n_existing + len(new_gt_types) samples.
     """
-    prefix = np.zeros(n_existing, dtype=np.uint8)  # HomRef = 0 in packed codes
+    pad_code = 0 if assume_homref else _GT_CODE_MISSING
+    prefix = np.full(n_existing, pad_code, dtype=np.uint8)
     new_codes = GT_REMAP[new_gt_types].astype(np.uint8)
     all_codes = np.concatenate([prefix, new_codes])
     return _pack_codes_direct(all_codes)
+
+
+def pad_called_for_new_variant(
+    n_existing: int,
+    new_gt_types: np.ndarray,
+    *,
+    assume_homref: bool = False,
+) -> bytes:
+    """Build ``called_packed`` for a NEW variant introduced in an incremental batch.
+
+    Existing samples get bit=0 (not interrogated) unless ``assume_homref`` is
+    true, in which case they get bit=1 (legacy "absent = HomRef" semantics).
+    New samples get bit=1 if the batch has any call at this site (cyvcf2 code
+    != 2) and bit=0 otherwise.
+
+    Args:
+        n_existing: number of existing samples (padded at the front).
+        new_gt_types: int8 array of cyvcf2 genotype codes for new samples.
+        assume_homref: legacy mode flag.
+
+    Returns:
+        Packed called bytes (1 bit/sample, LSB-first) for
+        n_existing + len(new_gt_types) samples.
+    """
+    prefix_val = 1 if assume_homref else 0
+    prefix = np.full(n_existing, prefix_val, dtype=np.uint8)
+    new_bits = (new_gt_types != 2).astype(np.uint8)
+    all_bits = np.concatenate([prefix, new_bits])
+    return _pack_bits(all_bits)
+
+
+def extend_called_packed(
+    existing: bytes | None,
+    n_existing: int,
+    new_gt_types: np.ndarray,
+) -> bytes:
+    """Extend called_packed for an EXISTING variant when new samples are appended.
+
+    Existing bits are preserved; new samples contribute bit=1 iff they have a
+    real call (cyvcf2 code != 2) at this site.
+
+    Args:
+        existing: current called_packed bytes from the database (may be None
+            for schema v1.0 databases, in which case all existing samples are
+            treated as called).
+        n_existing: number of samples in the existing called array.
+        new_gt_types: int8 array of cyvcf2 genotype codes for new samples.
+
+    Returns:
+        Combined called_packed bytes covering n_existing + len(new_gt_types).
+    """
+    if n_existing == 0:
+        return _pack_bits((new_gt_types != 2).astype(np.uint8))
+    old_bits = unpack_called_packed(existing, n_existing)
+    new_bits = (new_gt_types != 2).astype(np.uint8)
+    return _pack_bits(np.concatenate([old_bits, new_bits]))
+
+
+def concatenate_called_packed(
+    target_bytes: bytes | None,
+    n_target: int,
+    source_bytes: bytes | None,
+    n_source: int,
+) -> bytes:
+    """Concatenate two called_packed arrays (database merge).
+
+    Missing inputs (schema v1.0) are interpreted as "all samples called" on
+    that side to preserve legacy semantics.
+    """
+    if n_target == 0:
+        return source_bytes or build_called_packed_all(n_source, 1)
+    if n_source == 0:
+        return target_bytes or build_called_packed_all(n_target, 1)
+    tgt_bits = unpack_called_packed(target_bytes, n_target)
+    src_bits = unpack_called_packed(source_bytes, n_source)
+    return _pack_bits(np.concatenate([tgt_bits, src_bits]))
 
 
 def pad_phase_for_new_variant(
@@ -243,12 +336,20 @@ def concatenate_ploidy_packed(
     return _pack_bits(combined)
 
 
-def _genotype_contributions(gt_codes: np.ndarray) -> dict:
+def _genotype_contributions(
+    gt_codes: np.ndarray,
+    called_mask: np.ndarray | None = None,
+) -> dict:
     """Compute aggregate genotype contributions for a batch of samples.
 
     Args:
         gt_codes: uint8 array of packed genotype codes (0-3) for
             one or more samples at a single variant.
+        called_mask: optional uint8 0/1 array of the same length as ``gt_codes``.
+            Samples with called_mask[i] == 0 are treated as not interrogated
+            and contribute nothing to any count. When None, every sample is
+            treated as called (and uncalled samples must already be encoded as
+            gt==3 to be excluded). Defaults to None for back-compat.
 
     Returns:
         Dict with ac_delta, an_delta, het_delta, hom_alt_delta.
@@ -257,7 +358,9 @@ def _genotype_contributions(gt_codes: np.ndarray) -> dict:
     an_delta = 0
     het_delta = 0
     hom_alt_delta = 0
-    for gt in gt_codes:
+    for i, gt in enumerate(gt_codes):
+        if called_mask is not None and called_mask[i] == 0:
+            continue
         if gt == 0:  # HomRef
             an_delta += 2
         elif gt == 1:  # Het

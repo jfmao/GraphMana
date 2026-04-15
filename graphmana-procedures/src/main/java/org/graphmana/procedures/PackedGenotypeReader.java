@@ -131,4 +131,58 @@ final class PackedGenotypeReader {
     static int ploidyPackedLength(int nSamples) {
         return (nSamples + 7) >> 3;  // ceil(nSamples / 8)
     }
+
+    // ---- Called (1-bit per sample) ----
+    //
+    // Schema v1.1. Bit = 1 means the sample was interrogated at this variant
+    // (a real call of any kind, including explicit missing ./.), bit = 0
+    // means the sample was not looked at. Used by subset-stat procedures to
+    // exclude not-interrogated samples from the per-site denominator so that
+    // allele frequencies computed from GraphMana graphs remain honest when
+    // incremental batches carry different site lists.
+    //
+    // On schema v1.0 databases the property is absent; callers should pass
+    // null, and {@link #called(byte[], int)} will return 1 for every sample
+    // (legacy "all samples called" semantics, matching the assumption baked
+    // into the v1.0 pop-stat pipeline).
+
+    /**
+     * Extract the 1-bit called flag for sample {@code sampleIdx}.
+     *
+     * @param calledPacked packed called byte array (1 bit/sample). Null or empty
+     *     means schema v1.0 — all samples are treated as called.
+     * @param sampleIdx 0-based sample index
+     * @return 1 if interrogated (or legacy), 0 if not interrogated
+     */
+    static int called(byte[] calledPacked, int sampleIdx) {
+        if (calledPacked == null || calledPacked.length == 0) return 1;
+        int byteIdx = sampleIdx >> 3;
+        if (byteIdx >= calledPacked.length) return 1;
+        return (calledPacked[byteIdx] >> (sampleIdx & 7)) & 0x01;
+    }
+
+    /**
+     * Set a 1-bit called value for sample {@code sampleIdx} in a packed called array.
+     *
+     * @param calledPacked packed called byte array
+     * @param sampleIdx 0-based sample index
+     * @param called 1 = interrogated, 0 = not interrogated
+     */
+    static void setCalled(byte[] calledPacked, int sampleIdx, int called) {
+        int byteIdx = sampleIdx >> 3;
+        int bitIdx = sampleIdx & 7;
+        if (called != 0) {
+            calledPacked[byteIdx] |= (byte) (1 << bitIdx);
+        } else {
+            calledPacked[byteIdx] &= (byte) ~(1 << bitIdx);
+        }
+    }
+
+    /**
+     * Compute the byte array size needed for called_packed with the given sample count.
+     * Same layout as phase_packed/ploidy_packed: 1 bit per sample, LSB-first.
+     */
+    static int calledPackedLength(int nSamples) {
+        return (nSamples + 7) >> 3;  // ceil(nSamples / 8)
+    }
 }

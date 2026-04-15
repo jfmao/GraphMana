@@ -142,6 +142,8 @@ VARIANT_HEADER = [
     "gt_packed:byte[]",
     "phase_packed:byte[]",
     "ploidy_packed:byte[]",
+    "called_packed:byte[]",
+    "gt_encoding",
     "sv_type",
     "sv_len:long",
     "sv_end:long",
@@ -437,6 +439,12 @@ class CSVEmitter:
                 if rec.ploidy_packed
                 else ""
             )
+            called_packed_str = (
+                delim.join(str(b if b < 128 else b - 256) for b in rec.called_packed)
+                if rec.called_packed
+                else ""
+            )
+            gt_encoding_str = rec.gt_encoding or "dense"
 
             vw.writerow(
                 [
@@ -465,6 +473,8 @@ class CSVEmitter:
                     gt_packed_str,
                     phase_packed_str,
                     ploidy_packed_str,
+                    called_packed_str,
+                    gt_encoding_str,
                     rec.sv_type or "",
                     rec.sv_len if rec.sv_len is not None else "",
                     rec.sv_end if rec.sv_end is not None else "",

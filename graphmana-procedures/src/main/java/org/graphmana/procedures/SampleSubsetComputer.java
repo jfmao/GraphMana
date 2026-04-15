@@ -38,10 +38,20 @@ final class SampleSubsetComputer {
         byte[] gtPacked = (byte[]) variant.getProperty("gt_packed");
         Object ploidyObj = variant.getProperty("ploidy_packed", null);
         byte[] ploidyPacked = (ploidyObj instanceof byte[]) ? (byte[]) ploidyObj : null;
+        // Schema v1.1: called_packed is the pop-gen-honest source of truth
+        // for "was this sample interrogated here?". Absent on v1.0 databases;
+        // PackedGenotypeReader.called() returns 1 in that case to preserve
+        // legacy behavior (every sample assumed called).
+        Object calledObj = variant.getProperty("called_packed", null);
+        byte[] calledPacked = (calledObj instanceof byte[]) ? (byte[]) calledObj : null;
 
         for (int s = 0; s < nSamples; s++) {
             int pi = packedIndices[s];
             if (pi < 0) continue;
+            // Skip samples the current batch never interrogated. This keeps
+            // the per-variant denominator honest across incremental batches
+            // with mismatched site lists.
+            if (PackedGenotypeReader.called(calledPacked, pi) == 0) continue;
             int gt = PackedGenotypeReader.genotype(gtPacked, pi);
             if (gt == PackedGenotypeReader.GT_MISSING) continue;
 

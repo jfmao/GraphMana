@@ -188,6 +188,7 @@ def run_ingest(
     database: str = DEFAULT_DATABASE,
     mode: str = "auto",
     on_duplicate: str = "error",
+    assume_homref_on_missing: bool = False,
     # prepare-csv options
     stratify_by: str = "superpopulation",
     reference: str = "unknown",
@@ -346,6 +347,7 @@ def run_ingest(
             region=region,
             ploidy=ploidy,
             on_duplicate=on_duplicate,
+            assume_homref_on_missing=assume_homref_on_missing,
             verbose=verbose,
         )
 
@@ -461,6 +463,7 @@ def run_incremental(
     region: str | None = None,
     ploidy: str = "auto",
     on_duplicate: str = "error",
+    assume_homref_on_missing: bool = False,
     verbose: bool = False,
 ) -> dict:
     """Incremental sample addition to an existing database via Cypher.
@@ -610,7 +613,15 @@ def run_incremental(
             dataset_id=dataset_id,
             source_file=source_file,
             n_total_samples=n_total,
+            assume_homref_on_missing=assume_homref_on_missing,
         )
+        if assume_homref_on_missing:
+            logger.warning(
+                "Legacy --assume-homref-on-missing is enabled: existing "
+                "samples will be coded as HomRef at variants introduced by "
+                "this batch, reproducing the v1.0 semantics. Only use this "
+                "with fixed-site-list workflows."
+            )
         summary = ingester.run(parser, chunk_size=chunk_size, filter_chain=filter_chain)
 
         if duplicates and on_duplicate == "skip":

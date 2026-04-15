@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphmana"
-version = "1.0.0"
+version = "1.1.0"
 description = "Graph-native data management platform for population genomics"
 readme = "README.md"
 license = {text = "MIT"}

@@ -71,6 +71,10 @@ public class IncrementalExtendProcedure {
                 int[] gtCodes = toIntArray(entry.get("gtCodes"));
                 int[] phaseBits = toIntArray(entry.get("phaseBits"));
                 int[] ploidyBits = toIntArray(entry.get("ploidyBits"));
+                // v1.1: optional called bits per new sample. Absent entries
+                // are treated as 1 (interrogated) so that schema v1.0 clients
+                // continue to work unchanged.
+                int[] calledBits = toIntArrayOrOnes(entry.get("calledBits"), gtCodes.length);
                 int nNew = gtCodes.length;
                 int nTotal = nExist + nNew;
 
@@ -113,6 +117,17 @@ public class IncrementalExtendProcedure {
                     v.removeProperty("ploidy_packed");
                 }
 
+                // --- Extend called_packed (schema v1.1) ---
+                // Missing on existing node means v1.0 DB: synthesize
+                // "all-called" for the existing slice before appending new bits.
+                byte[] oldCalled = getByteArrayOrOnes(v, "called_packed", nExist);
+                byte[] newCalled = new byte[PackedGenotypeReader.calledPackedLength(nTotal)];
+                System.arraycopy(oldCalled, 0, newCalled, 0, oldCalled.length);
+                for (int i = 0; i < nNew; i++) {
+                    PackedGenotypeReader.setCalled(newCalled, nExist + i, calledBits[i]);
+                }
+                v.setProperty("called_packed", newCalled);
+
                 // --- Merge population statistics ---
                 mergePopStats(v, entry, nTotal);
 
@@ -149,18 +164,25 @@ public class IncrementalExtendProcedure {
             @Name("nNew") Long nNew,
             @Name("newPopIds") List<String> newPopIds,
             @Name("newPopAn") List<Long> newPopAn,
-            @Name(value = "batchSize", defaultValue = "2000") Long batchSize) {
+            @Name(value = "batchSize", defaultValue = "2000") Long batchSize,
+            @Name(value = "assumeHomrefOnMissing", defaultValue = "true") Boolean assumeHomrefOnMissing) {
 
         int nExist = nExisting.intValue();
         int nNewInt = nNew.intValue();
         int nTotal = nExist + nNewInt;
         int extended = 0;
         int failed = 0;
+        // Default keeps the v1.0 "absent = HomRef (called)" semantics for
+        // forward compatibility of older Python clients that invoke this
+        // procedure without the new parameter. v1.1 clients pass false to
+        // get the pop-gen-correct behavior (new samples marked not-interrogated).
+        boolean assumeHomref = assumeHomrefOnMissing == null || assumeHomrefOnMissing;
 
         // Pre-compute new array sizes
         int newGtLen = PackedGenotypeReader.gtPackedLength(nTotal);
         int newPhaseLen = PackedGenotypeReader.phasePackedLength(nTotal);
         int newPloidyLen = PackedGenotypeReader.ploidyPackedLength(nTotal);
+        int newCalledLen = PackedGenotypeReader.calledPackedLength(nTotal);
 
         // Pre-build the new pop stats for merging (all HomRef: ac=0, het=0, hom=0)
         String[] newPids = newPopIds.toArray(new String[0]);
@@ -181,14 +203,21 @@ public class IncrementalExtendProcedure {
             var row = result.next();
             Node v = (Node) row.get("v");
             try {
-                // Extend gt_packed (new samples are all HomRef = 0, which is the default in new byte[])
+                // Extend gt_packed. In legacy mode (assume_homref), new samples
+                // are HomRef (code 0 = all zero bits, already the default). In
+                // honest mode they are Missing (code 3 = 11b in every slot).
                 byte[] oldGt = (byte[]) v.getProperty("gt_packed");
                 byte[] newGt = new byte[newGtLen];
                 System.arraycopy(oldGt, 0, newGt, 0, oldGt.length);
-                // No need to set genotypes — HomRef is 0, and new byte[] is zero-initialized
+                if (!assumeHomref) {
+                    for (int i = 0; i < nNewInt; i++) {
+                        PackedGenotypeReader.setGenotype(
+                                newGt, nExist + i, PackedGenotypeReader.GT_MISSING);
+                    }
+                }
                 v.setProperty("gt_packed", newGt);
 
-                // Extend phase_packed (new samples are all 0)
+                // Extend phase_packed (new samples are all 0 in both modes)
                 byte[] oldPhase = getByteArrayOrEmpty(v, "phase_packed", nExist);
                 byte[] newPhase = new byte[newPhaseLen];
                 System.arraycopy(oldPhase, 0, newPhase, 0, oldPhase.length);
@@ -203,6 +232,19 @@ public class IncrementalExtendProcedure {
                     System.arraycopy(oldPloidy, 0, newPloidy, 0, oldPloidy.length);
                     v.setProperty("ploidy_packed", newPloidy);
                 }
+
+                // Extend called_packed. Legacy mode sets new bits to 1 (all
+                // new samples interrogated as HomRef). Honest mode leaves new
+                // bits at 0 (new samples not interrogated at this site).
+                byte[] oldCalled = getByteArrayOrOnes(v, "called_packed", nExist);
+                byte[] newCalled = new byte[newCalledLen];
+                System.arraycopy(oldCalled, 0, newCalled, 0, oldCalled.length);
+                if (assumeHomref) {
+                    for (int i = 0; i < nNewInt; i++) {
+                        PackedGenotypeReader.setCalled(newCalled, nExist + i, 1);
+                    }
+                }
+                v.setProperty("called_packed", newCalled);
 
                 // Merge pop stats
                 mergePopStatsFromArrays(v, newPids, newAc, newAn, newHet, newHom, nTotal);
@@ -246,6 +288,44 @@ public class IncrementalExtendProcedure {
         Object val = v.getProperty(property);
         if (val instanceof byte[]) return (byte[]) val;
         return new byte[0];
+    }
+
+    /**
+     * Read a byte-array property, or synthesize an "all-ones" array covering
+     * {@code nSamples} sample bits when the property is missing (schema v1.0).
+     * Used for {@code called_packed} so that v1.0 databases continue to treat
+     * every existing sample as called.
+     */
+    private static byte[] getByteArrayOrOnes(Node v, String property, int nSamples) {
+        if (v.hasProperty(property)) {
+            Object val = v.getProperty(property);
+            if (val instanceof byte[]) return (byte[]) val;
+        }
+        int len = PackedGenotypeReader.calledPackedLength(nSamples);
+        byte[] out = new byte[len];
+        // Set every sample bit. Full bytes are 0xFF; the final byte may be
+        // partial, in which case we set only the first (nSamples & 7) bits.
+        int fullBytes = nSamples >> 3;
+        int tailBits = nSamples & 7;
+        for (int i = 0; i < fullBytes; i++) out[i] = (byte) 0xFF;
+        if (tailBits > 0 && fullBytes < len) {
+            out[fullBytes] = (byte) ((1 << tailBits) - 1);
+        }
+        return out;
+    }
+
+    /**
+     * Convert a Python list to an int[], falling back to an array of ones of
+     * length {@code fallbackLength} when the input is null. Used for the
+     * optional {@code calledBits} parameter on v1.0 clients.
+     */
+    private static int[] toIntArrayOrOnes(Object listObj, int fallbackLength) {
+        if (listObj == null) {
+            int[] out = new int[fallbackLength];
+            for (int i = 0; i < fallbackLength; i++) out[i] = 1;
+            return out;
+        }
+        return toIntArray(listObj);
     }
 
     /**

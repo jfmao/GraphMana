@@ -17,6 +17,7 @@ from cyvcf2 import VCF
 
 from graphmana.ingest.chr_reconciler import ChrReconciler
 from graphmana.ingest.genotype_packer import (
+    build_called_packed,
     build_ploidy_packed,
     pack_phase,
     vectorized_gt_pack,
@@ -75,6 +76,13 @@ class VariantRecord:
     gt_packed: bytes = b""
     phase_packed: bytes = b""
     ploidy_packed: bytes = b""
+    # v1.1: per-sample "interrogated" bit; 1=called, 0=not looked at.
+    # Distinguishes "called HomRef" from "not interrogated" for joint-called
+    # (gVCF-derived) VCFs and incremental cross-batch ingestion.
+    called_packed: bytes = b""
+    # v1.1: storage format tag for gt_packed — "dense" (default) or "sparse_v1".
+    # Set by the CSV/DB writer; parser always emits dense.
+    gt_encoding: str = "dense"
 
     # Structural variant fields (optional, from INFO)
     sv_type: str | None = None  # DEL, DUP, INV, INS, BND, CNV
@@ -447,6 +455,10 @@ class VCFParser:
 
             # --- Packed genotype arrays ---
             gt_packed_data = vectorized_gt_pack(gt_types)
+            # Called-mask: one bit per sample. cyvcf2 code 2 = MISSING (./.)
+            # means the joint caller did not produce a call for this sample at
+            # this site. Everything else counts as interrogated.
+            called_packed_data = build_called_packed(gt_types)
 
             # --- Phase packing (for het sites) ---
             het_idx = np.flatnonzero(gt_types == 1)
@@ -535,6 +547,7 @@ class VCFParser:
                 gt_packed=gt_packed_data,
                 phase_packed=phase_packed_data,
                 ploidy_packed=ploidy_packed_bytes,
+                called_packed=called_packed_data,
                 sv_type=sv_type_val,
                 sv_len=sv_len_val,
                 sv_end=sv_end_val,

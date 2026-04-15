@@ -11,10 +11,16 @@ from typing import Iterator, TypedDict
 
 import numpy as np
 
-from graphmana.db.connection import GraphManaConnection
 from graphmana.db import queries as Q
+from graphmana.db.connection import GraphManaConnection
 from graphmana.filtering.export_filters import ExportFilter, ExportFilterConfig
-from graphmana.ingest.genotype_packer import unpack_genotypes, unpack_phase, unpack_ploidy
+from graphmana.ingest.genotype_packer import (
+    decode_gt_blob,
+    unpack_called_packed,
+    unpack_genotypes,
+    unpack_phase,
+    unpack_ploidy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,19 +304,33 @@ class BaseExporter(ABC):
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Unpack genotypes for a specific subset of samples.
 
+        Schema v1.1: honors the ``called_packed`` mask by forcing the
+        genotype code to Missing (3) for any sample whose bit is 0. This
+        means every FULL PATH exporter automatically emits its format's
+        missing token for not-interrogated samples, without each exporter
+        needing bespoke called-mask logic. Schema v1.0 databases (missing
+        property) are interpreted as "all samples called" so legacy behavior
+        is preserved.
+
+        Transparently decodes the optional sparse gt_packed blob format
+        introduced in v1.1 (format tag byte 0x01 — see
+        :func:`genotype_packer.encode_gt_blob`).
+
         Args:
             variant_props: Variant node properties including gt_packed,
-                phase_packed, ploidy_packed.
+                phase_packed, ploidy_packed, called_packed.
             packed_indices: Sorted array of packed_index values for the
                 samples to extract.
 
         Returns:
             Tuple of (gt_codes, phase_bits, ploidy_flags) arrays,
-            each of length len(packed_indices).
+            each of length len(packed_indices). Uncalled slots are coded
+            as gt=3 (Missing).
         """
         gt_packed = variant_props.get("gt_packed")
         phase_packed = variant_props.get("phase_packed")
         ploidy_packed = variant_props.get("ploidy_packed")
+        called_packed = variant_props.get("called_packed")
 
         if gt_packed is None:
             n = len(packed_indices)
@@ -327,10 +347,24 @@ class BaseExporter(ABC):
             phase_packed = bytes(phase_packed)
         if isinstance(ploidy_packed, (list, bytearray)):
             ploidy_packed = bytes(ploidy_packed)
+        if isinstance(called_packed, (list, bytearray)):
+            called_packed = bytes(called_packed)
 
-        # Total samples is determined by packed array size
-        n_total = len(gt_packed) * 4
-        # But actual n_samples may be less; we unpack all then subset
+        # Determine sample count from the (decoded) dense blob length.
+        # For v1.0 databases or dense-tagged v1.1 blobs this is
+        # len(gt_packed) * 4. For sparse-tagged blobs we decode through the
+        # helper using an initial guess and then adjust.
+        if gt_packed and gt_packed[0] == 0x01:
+            # Sparse blob: the header stores authoritative n_samples.
+            stored_n = int.from_bytes(gt_packed[1:5], "little")
+            gt_packed = decode_gt_blob(gt_packed, stored_n)
+            n_total = stored_n
+        else:
+            n_total = len(gt_packed) * 4
+            # Strip dense tag if present before raw unpack.
+            if gt_packed and gt_packed[0] == 0x00 and len(gt_packed) == n_total + 1:
+                gt_packed = gt_packed[1:]
+                n_total = len(gt_packed) * 4
         gt_all = unpack_genotypes(gt_packed, n_total)
         phase_all = (
             unpack_phase(phase_packed, n_total)
@@ -338,6 +372,10 @@ class BaseExporter(ABC):
             else np.zeros(n_total, dtype=np.uint8)
         )
         ploidy_all = unpack_ploidy(ploidy_packed, n_total)
+        # v1.1: force uncalled samples to Missing so legacy exporter code
+        # that checks ``gt == 3`` continues to Do The Right Thing.
+        called_all = unpack_called_packed(called_packed, n_total)
+        gt_all = np.where(called_all == 0, 3, gt_all).astype(gt_all.dtype)
 
         # Subset to requested sample indices
         max_idx = len(gt_all)
