@@ -61,9 +61,15 @@ graphmana ingest \
 Each biallelic split has its own:
 
 - `gt_packed` byte array -- genotypes recoded relative to that specific ALT
-  allele (HomRef=0, Het=1, HomAlt=2, Missing=3)
+  allele (HomRef=0, Het=1, HomAlt=2, Missing=3). Optionally stored in a
+  sparse tagged-blob format (v1.1) when dominated by HomRef samples.
+- `called_packed` byte array (v1.1) -- 1 bit/sample, 1=interrogated at this
+  site, 0=not looked at. Distinguishes "called HomRef" from "not seen" so
+  that per-population `an[]` is honest even when incremental batches carry
+  different site lists. See `docs/gvcf-workflow.md` for the full rationale.
 - Population arrays (`ac[]`, `an[]`, `af[]`) -- allele counts computed
-  independently per allele
+  independently per allele, with the denominator excluding samples whose
+  `called_packed` bit is 0.
 - All other Variant properties (`qual`, `filter`, `consequence`, etc.)
 
 This means a sample that is heterozygous for two different ALT alleles (genotype

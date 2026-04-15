@@ -185,9 +185,10 @@ Must NOT copy: statistical procedures, HaplotypeMatrix, GraphPop benchmarks/CLI.
 
 ## Packed Genotype Array Specification
 
-**gt_packed**: 2 bits/sample, 4/byte, LSB-first. 00=HomRef, 01=Het, 10=HomAlt, 11=Missing. CRITICAL REMAP from cyvcf2.
+**gt_packed**: 2 bits/sample, 4/byte, LSB-first. 00=HomRef, 01=Het, 10=HomAlt, 11=Missing. CRITICAL REMAP from cyvcf2. v1.1: optional tagged-blob wrapper (0x00 dense / 0x01 sparse) chosen per variant.
 **phase_packed**: 1 bit/sample, 8/byte, LSB-first.
 **ploidy_packed**: 1 bit/sample. Null = all diploid.
+**called_packed** (v1.1): 1 bit/sample, 8/byte, LSB-first. 1=sample was interrogated at this site, 0=not looked at. Preserves HomRef-vs-Missing across incremental batches. Null on schema v1.0 DBs = "all samples called" (legacy fallback). See docs/gvcf-workflow.md.
 **CSV**: Semicolon-delimited signed Java bytes (-128 to 127).
 **PackedGenotypeReader**: Branchless bit shifts. O(1) per sample.
 
