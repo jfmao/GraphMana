@@ -1,0 +1,349 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 920" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+    </marker>
+    <marker id="greenarrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1B9E77"/>
+    </marker>
+    <marker id="purplearrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7570B3"/>
+    </marker>
+    <marker id="redarrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#E41A1C"/>
+    </marker>
+    <!-- Checkmark -->
+    <symbol id="check" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11" fill="#1B9E77"/>
+      <path d="M6,12 L10,16 L18,8" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <!-- Cross -->
+    <symbol id="cross" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11" fill="#E41A1C"/>
+      <line x1="8" y1="8" x2="16" y2="16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="16" y1="8" x2="8" y2="16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+    <!-- Clock icon -->
+    <symbol id="clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" fill="none" stroke-width="2"/>
+      <line x1="12" y1="6" x2="12" y2="12" stroke-width="2" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="17" y2="14" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <!-- Lightning bolt -->
+    <symbol id="bolt" viewBox="0 0 20 30">
+      <polygon points="12,0 4,14 10,14 8,30 16,16 10,16" fill="#E6AB02"/>
+    </symbol>
+  </defs>
+
+  <!-- ================================================================ -->
+  <!-- TITLE                                                            -->
+  <!-- ================================================================ -->
+  <text x="525" y="32" text-anchor="middle" font-size="22" font-weight="bold" fill="#333">Why FAST PATH? What's Inside a Variant Node</text>
+  <text x="525" y="54" text-anchor="middle" font-size="13" fill="#888">Most population genetics tools need population summaries, not individual genotypes</text>
+
+  <!-- ================================================================ -->
+  <!-- SECTION A: THE VARIANT NODE — WHAT'S STORED                      -->
+  <!-- ================================================================ -->
+  <text x="30" y="90" font-size="16" font-weight="bold" fill="#377EB8">A</text>
+  <text x="48" y="90" font-size="14" font-weight="bold" fill="#333">Inside a Variant Node (chr22:16050075 G&gt;A)</text>
+
+  <!-- Big Variant node container -->
+  <rect x="30" y="105" width="990" height="210" rx="14" fill="#F5F8FC" stroke="#377EB8" stroke-width="2.5"/>
+
+  <!-- Variant circle icon -->
+  <circle cx="70" cy="140" r="22" fill="#377EB8"/>
+  <text x="70" y="146" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">V</text>
+  <text x="70" y="178" text-anchor="middle" font-size="9" fill="#377EB8" font-weight="bold">Variant</text>
+
+  <!-- gt_packed: the big array -->
+  <text x="130" y="130" font-size="11" font-weight="bold" fill="#7570B3">gt_packed</text>
+  <text x="235" y="130" font-size="9" fill="#888">(2 bits per sample, 4 samples per byte)</text>
+
+  <!-- Show individual bytes as cells -->
+  <!-- Byte 0 -->
+  <rect x="130" y="137" width="50" height="28" rx="3" fill="#7570B3" stroke="#fff" stroke-width="1"/>
+  <text x="155" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">00 01 10 00</text>
+  <!-- Byte 1 -->
+  <rect x="183" y="137" width="50" height="28" rx="3" fill="#7570B3" stroke="#fff" stroke-width="1"/>
+  <text x="208" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">01 00 01 10</text>
+  <!-- Byte 2 -->
+  <rect x="236" y="137" width="50" height="28" rx="3" fill="#7570B3" stroke="#fff" stroke-width="1"/>
+  <text x="261" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">00 00 11 01</text>
+  <!-- Byte 3 -->
+  <rect x="289" y="137" width="50" height="28" rx="3" fill="#9E9AC8" stroke="#fff" stroke-width="1"/>
+  <text x="314" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">10 01 00 00</text>
+  <!-- ... ellipsis -->
+  <text x="355" y="155" font-size="14" fill="#7570B3" font-weight="bold">...</text>
+  <!-- Byte N -->
+  <rect x="375" y="137" width="50" height="28" rx="3" fill="#9E9AC8" stroke="#fff" stroke-width="1"/>
+  <text x="400" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">01 00 10 01</text>
+  <!-- Byte N+1 -->
+  <rect x="428" y="137" width="50" height="28" rx="3" fill="#9E9AC8" stroke="#fff" stroke-width="1"/>
+  <text x="453" y="155" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">00 11 01 00</text>
+
+  <!-- Encoding legend under gt_packed -->
+  <rect x="130" y="170" width="20" height="12" rx="2" fill="#377EB8"/>
+  <text x="155" y="180" font-size="8" fill="#555">00 = Hom Ref</text>
+  <rect x="220" y="170" width="20" height="12" rx="2" fill="#E7298A"/>
+  <text x="245" y="180" font-size="8" fill="#555">01 = Het</text>
+  <rect x="295" y="170" width="20" height="12" rx="2" fill="#D95F02"/>
+  <text x="320" y="180" font-size="8" fill="#555">10 = Hom Alt</text>
+  <rect x="390" y="170" width="20" height="12" rx="2" fill="#999"/>
+  <text x="415" y="180" font-size="8" fill="#555">11 = Missing</text>
+
+  <!-- Size annotation -->
+  <line x1="130" y1="192" x2="478" y2="192" stroke="#7570B3" stroke-width="1"/>
+  <line x1="130" y1="188" x2="130" y2="196" stroke="#7570B3" stroke-width="1"/>
+  <line x1="478" y1="188" x2="478" y2="196" stroke="#7570B3" stroke-width="1"/>
+  <text x="304" y="206" text-anchor="middle" font-size="10" fill="#7570B3" font-weight="bold">ceil(N/4) bytes = 801 bytes for 3,202 samples</text>
+  <text x="304" y="218" text-anchor="middle" font-size="9" fill="#7570B3">Grows linearly with N (sample count)</text>
+
+  <!-- Population arrays: the small arrays -->
+  <text x="550" y="130" font-size="11" font-weight="bold" fill="#1B9E77">Pre-computed population arrays</text>
+  <text x="740" y="130" font-size="9" fill="#888">(computed once at import time)</text>
+
+  <!-- pop_ids[] -->
+  <text x="550" y="150" font-size="9" fill="#555" font-weight="bold">pop_ids:</text>
+  <rect x="610" y="138" width="40" height="18" rx="3" fill="#66A61E" stroke="#fff"/>
+  <text x="630" y="151" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">AFR</text>
+  <rect x="653" y="138" width="40" height="18" rx="3" fill="#E6AB02" stroke="#fff"/>
+  <text x="673" y="151" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">EUR</text>
+  <rect x="696" y="138" width="40" height="18" rx="3" fill="#E7298A" stroke="#fff"/>
+  <text x="716" y="151" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">EAS</text>
+  <rect x="739" y="138" width="40" height="18" rx="3" fill="#7570B3" stroke="#fff"/>
+  <text x="759" y="151" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">SAS</text>
+  <rect x="782" y="138" width="40" height="18" rx="3" fill="#D95F02" stroke="#fff"/>
+  <text x="802" y="151" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">AMR</text>
+
+  <!-- ac[] (allele counts) -->
+  <text x="550" y="176" font-size="9" fill="#555" font-weight="bold">ac[]:</text>
+  <rect x="610" y="164" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff"/>
+  <text x="630" y="177" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">342</text>
+  <rect x="653" y="164" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff"/>
+  <text x="673" y="177" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">87</text>
+  <rect x="696" y="164" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff"/>
+  <text x="716" y="177" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">12</text>
+  <rect x="739" y="164" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff"/>
+  <text x="759" y="177" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">56</text>
+  <rect x="782" y="164" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff"/>
+  <text x="802" y="177" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">23</text>
+
+  <!-- an[] (allele numbers) -->
+  <text x="550" y="202" font-size="9" fill="#555" font-weight="bold">an[]:</text>
+  <rect x="610" y="190" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.7"/>
+  <text x="630" y="203" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">1322</text>
+  <rect x="653" y="190" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.7"/>
+  <text x="673" y="203" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">1006</text>
+  <rect x="696" y="190" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.7"/>
+  <text x="716" y="203" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">1008</text>
+  <rect x="739" y="190" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.7"/>
+  <text x="759" y="203" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">978</text>
+  <rect x="782" y="190" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.7"/>
+  <text x="802" y="203" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">694</text>
+
+  <!-- af[] (allele frequencies) -->
+  <text x="550" y="228" font-size="9" fill="#555" font-weight="bold">af[]:</text>
+  <rect x="610" y="216" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.5"/>
+  <text x="630" y="229" text-anchor="middle" font-size="9" fill="#333" font-weight="bold">.259</text>
+  <rect x="653" y="216" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.5"/>
+  <text x="673" y="229" text-anchor="middle" font-size="9" fill="#333" font-weight="bold">.086</text>
+  <rect x="696" y="216" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.5"/>
+  <text x="716" y="229" text-anchor="middle" font-size="9" fill="#333" font-weight="bold">.012</text>
+  <rect x="739" y="216" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.5"/>
+  <text x="759" y="229" text-anchor="middle" font-size="9" fill="#333" font-weight="bold">.057</text>
+  <rect x="782" y="216" width="40" height="18" rx="3" fill="#1B9E77" stroke="#fff" opacity="0.5"/>
+  <text x="802" y="229" text-anchor="middle" font-size="9" fill="#333" font-weight="bold">.033</text>
+
+  <!-- Also het_count[], hom_alt_count[] label -->
+  <text x="550" y="250" font-size="8" fill="#999" font-style="italic">+ het_count[], hom_alt_count[], het_exp[]</text>
+
+  <!-- Size annotation for pop arrays -->
+  <line x1="610" y1="260" x2="822" y2="260" stroke="#1B9E77" stroke-width="1"/>
+  <line x1="610" y1="256" x2="610" y2="264" stroke="#1B9E77" stroke-width="1"/>
+  <line x1="822" y1="256" x2="822" y2="264" stroke="#1B9E77" stroke-width="1"/>
+  <text x="716" y="276" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">K elements = 5 values for 5 populations</text>
+  <text x="716" y="290" text-anchor="middle" font-size="9" fill="#1B9E77">Constant size regardless of N!</text>
+
+  <!-- Divider line between the two data types -->
+  <line x1="520" y1="125" x2="520" y2="300" stroke="#ccc" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- ================================================================ -->
+  <!-- SECTION B: THE KEY INSIGHT — WHAT DO TOOLS ACTUALLY NEED?        -->
+  <!-- ================================================================ -->
+  <text x="30" y="345" font-size="16" font-weight="bold" fill="#377EB8">B</text>
+  <text x="48" y="345" font-size="14" font-weight="bold" fill="#333">The Key Insight: What Do Downstream Tools Actually Need?</text>
+
+  <!-- LEFT: Tools that need population summaries -->
+  <rect x="30" y="365" width="470" height="195" rx="12" fill="#F0FAF0" stroke="#1B9E77" stroke-width="2"/>
+  <text x="265" y="388" text-anchor="middle" font-size="13" font-weight="bold" fill="#1B9E77">Tools that need POPULATION SUMMARIES</text>
+  <text x="265" y="403" text-anchor="middle" font-size="10" fill="#1B9E77">(allele counts per population)</text>
+
+  <!-- TreeMix -->
+  <rect x="50" y="415" width="90" height="50" rx="6" fill="#fff" stroke="#1B9E77" stroke-width="1.5"/>
+  <text x="95" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#1B9E77">TreeMix</text>
+  <text x="95" y="452" text-anchor="middle" font-size="8" fill="#666">population trees</text>
+  <!-- What it reads -->
+  <text x="95" y="478" text-anchor="middle" font-size="8" fill="#1B9E77">needs: ac[], an[]</text>
+
+  <!-- dadi (SFS) -->
+  <rect x="155" y="415" width="90" height="50" rx="6" fill="#fff" stroke="#1B9E77" stroke-width="1.5"/>
+  <text x="200" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#1B9E77">dadi</text>
+  <text x="200" y="452" text-anchor="middle" font-size="8" fill="#666">demography (SFS)</text>
+  <text x="200" y="478" text-anchor="middle" font-size="8" fill="#1B9E77">needs: ac[], an[]</text>
+
+  <!-- fastsimcoal2 (SFS) -->
+  <rect x="260" y="415" width="100" height="50" rx="6" fill="#fff" stroke="#1B9E77" stroke-width="1.5"/>
+  <text x="310" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#1B9E77">fastsimcoal2</text>
+  <text x="310" y="452" text-anchor="middle" font-size="8" fill="#666">demography (SFS)</text>
+  <text x="310" y="478" text-anchor="middle" font-size="8" fill="#1B9E77">needs: ac[], an[]</text>
+
+  <!-- BED / freq queries -->
+  <rect x="375" y="415" width="110" height="50" rx="6" fill="#fff" stroke="#1B9E77" stroke-width="1.5"/>
+  <text x="430" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#1B9E77">bedtools / freq</text>
+  <text x="430" y="452" text-anchor="middle" font-size="8" fill="#666">positions, AF queries</text>
+  <text x="430" y="478" text-anchor="middle" font-size="8" fill="#1B9E77">needs: pos, af[]</text>
+
+  <!-- Observation -->
+  <text x="265" y="510" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">None of these tools need individual genotypes!</text>
+  <use href="#bolt" x="155" y="515" width="14" height="21"/>
+  <text x="265" y="540" text-anchor="middle" font-size="11" fill="#1B9E77" font-weight="bold">FAST PATH: read K pre-computed values directly</text>
+
+  <!-- RIGHT: Tools that need individual genotypes -->
+  <rect x="530" y="365" width="490" height="195" rx="12" fill="#F5F0FA" stroke="#7570B3" stroke-width="2"/>
+  <text x="775" y="388" text-anchor="middle" font-size="13" font-weight="bold" fill="#7570B3">Tools that need INDIVIDUAL GENOTYPES</text>
+  <text x="775" y="403" text-anchor="middle" font-size="10" fill="#7570B3">(per-sample allele calls)</text>
+
+  <!-- PLINK -->
+  <rect x="550" y="415" width="90" height="50" rx="6" fill="#fff" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="595" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#7570B3">PLINK</text>
+  <text x="595" y="452" text-anchor="middle" font-size="8" fill="#666">GWAS, PCA, QC</text>
+  <text x="595" y="478" text-anchor="middle" font-size="8" fill="#7570B3">needs: every GT</text>
+
+  <!-- EIGENSTRAT -->
+  <rect x="655" y="415" width="100" height="50" rx="6" fill="#fff" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="705" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#7570B3">EIGENSTRAT</text>
+  <text x="705" y="452" text-anchor="middle" font-size="8" fill="#666">smartPCA, admixture</text>
+  <text x="705" y="478" text-anchor="middle" font-size="8" fill="#7570B3">needs: every GT</text>
+
+  <!-- VCF -->
+  <rect x="770" y="415" width="75" height="50" rx="6" fill="#fff" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="808" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#7570B3">VCF</text>
+  <text x="808" y="452" text-anchor="middle" font-size="8" fill="#666">standard exchange</text>
+  <text x="808" y="478" text-anchor="middle" font-size="8" fill="#7570B3">needs: every GT</text>
+
+  <!-- Beagle / STRUCTURE -->
+  <rect x="860" y="415" width="145" height="50" rx="6" fill="#fff" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="933" y="437" text-anchor="middle" font-size="11" font-weight="bold" fill="#7570B3">Beagle / STRUCTURE</text>
+  <text x="933" y="452" text-anchor="middle" font-size="8" fill="#666">phasing, clustering</text>
+  <text x="933" y="478" text-anchor="middle" font-size="8" fill="#7570B3">needs: every GT</text>
+
+  <!-- Observation -->
+  <text x="775" y="510" text-anchor="middle" font-size="10" fill="#7570B3" font-weight="bold">These tools require per-sample data.</text>
+  <text x="775" y="540" text-anchor="middle" font-size="11" fill="#7570B3" font-weight="bold">FULL PATH: unpack N genotypes from gt_packed</text>
+
+  <!-- ================================================================ -->
+  <!-- SECTION C: THE SCALING COMPARISON                                -->
+  <!-- ================================================================ -->
+  <text x="30" y="590" font-size="16" font-weight="bold" fill="#377EB8">C</text>
+  <text x="48" y="590" font-size="14" font-weight="bold" fill="#333">Why It Matters: Scaling with Sample Count</text>
+
+  <!-- Comparison table background -->
+  <rect x="30" y="605" width="990" height="155" rx="10" fill="#FAFAFA" stroke="#ddd" stroke-width="1.5"/>
+
+  <!-- Table header -->
+  <rect x="32" y="607" width="986" height="28" rx="6" fill="#E8E8E8"/>
+  <text x="155" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#333">Scenario</text>
+  <text x="340" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#333">Samples (N)</text>
+  <text x="470" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#333">Populations (K)</text>
+  <text x="620" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#7570B3">FULL PATH reads</text>
+  <text x="780" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#1B9E77">FAST PATH reads</text>
+  <text x="930" y="626" text-anchor="middle" font-size="10" font-weight="bold" fill="#E6AB02">Speedup</text>
+
+  <!-- Row 1: Small project -->
+  <text x="155" y="654" text-anchor="middle" font-size="10" fill="#333">Small project</text>
+  <text x="340" y="654" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">100</text>
+  <text x="470" y="654" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">5</text>
+  <text x="620" y="654" text-anchor="middle" font-size="10" fill="#7570B3">100 values/variant</text>
+  <text x="780" y="654" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">5 values/variant</text>
+  <text x="930" y="654" text-anchor="middle" font-size="11" fill="#E6AB02" font-weight="bold">20x</text>
+
+  <!-- Row 2: 1KGP -->
+  <rect x="32" y="663" width="986" height="24" fill="#F5F5F5" rx="0"/>
+  <text x="155" y="680" text-anchor="middle" font-size="10" fill="#333">1000 Genomes</text>
+  <text x="340" y="680" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">3,202</text>
+  <text x="470" y="680" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">26</text>
+  <text x="620" y="680" text-anchor="middle" font-size="10" fill="#7570B3">3,202 values/variant</text>
+  <text x="780" y="680" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">26 values/variant</text>
+  <text x="930" y="680" text-anchor="middle" font-size="11" fill="#E6AB02" font-weight="bold">123x</text>
+
+  <!-- Row 3: Large project -->
+  <text x="155" y="706" text-anchor="middle" font-size="10" fill="#333">Large biobank</text>
+  <text x="340" y="706" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">50,000</text>
+  <text x="470" y="706" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">10</text>
+  <text x="620" y="706" text-anchor="middle" font-size="10" fill="#7570B3">50,000 values/variant</text>
+  <text x="780" y="706" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">10 values/variant</text>
+  <text x="930" y="706" text-anchor="middle" font-size="11" fill="#E6AB02" font-weight="bold">5,000x</text>
+
+  <!-- Row 4: Timing reality -->
+  <rect x="32" y="714" width="986" height="26" fill="#F0FAF0" rx="0"/>
+  <text x="155" y="732" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">Real benchmark</text>
+  <text x="340" y="732" text-anchor="middle" font-size="10" fill="#333">1KGP chr22</text>
+  <text x="470" y="732" text-anchor="middle" font-size="10" fill="#333">1.07M variants</text>
+  <text x="620" y="732" text-anchor="middle" font-size="10" fill="#7570B3" font-weight="bold">42 sec (PLINK)</text>
+  <text x="780" y="732" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">0.6 sec (TreeMix)</text>
+
+  <!-- Lightning bolt highlight -->
+  <use href="#bolt" x="860" y="720" width="12" height="18"/>
+  <text x="930" y="732" text-anchor="middle" font-size="11" fill="#E6AB02" font-weight="bold">70x faster</text>
+
+  <!-- Arrow showing N grows but K stays constant -->
+  <line x1="340" y1="643" x2="340" y2="735" stroke="#E41A1C" stroke-width="2" marker-end="url(#redarrow)"/>
+  <text x="345" y="748" font-size="8" fill="#E41A1C" font-weight="bold">N grows</text>
+  <text x="780" y="748" text-anchor="middle" font-size="9" fill="#1B9E77" font-weight="bold">K stays constant = always fast!</text>
+
+  <!-- ================================================================ -->
+  <!-- SECTION D: VISUAL FLOW COMPARISON                                -->
+  <!-- ================================================================ -->
+  <text x="30" y="790" font-size="16" font-weight="bold" fill="#377EB8">D</text>
+  <text x="48" y="790" font-size="14" font-weight="bold" fill="#333">TreeMix Export: FULL PATH vs FAST PATH</text>
+
+  <!-- LEFT: The wasteful way (FULL PATH for TreeMix) -->
+  <rect x="30" y="805" width="470" height="100" rx="10" fill="#FFF5F5" stroke="#E41A1C" stroke-width="1.5"/>
+  <use href="#cross" x="40" y="810" width="18" height="18"/>
+  <text x="68" y="825" font-size="11" font-weight="bold" fill="#E41A1C">Without FAST PATH (wasteful)</text>
+
+  <!-- Show unpacking all 3202 genotypes -->
+  <rect x="50" y="838" width="130" height="22" rx="4" fill="#7570B3"/>
+  <text x="115" y="853" text-anchor="middle" font-size="8" fill="#fff">Unpack 3,202 genotypes</text>
+  <path d="M 182 849 L 200 849" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)" fill="none"/>
+
+  <rect x="205" y="838" width="120" height="22" rx="4" fill="#7570B3" opacity="0.7"/>
+  <text x="265" y="853" text-anchor="middle" font-size="8" fill="#fff">Count alleles per pop</text>
+  <path d="M 327 849 L 345 849" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)" fill="none"/>
+
+  <rect x="350" y="838" width="80" height="22" rx="4" fill="#7570B3" opacity="0.5"/>
+  <text x="390" y="853" text-anchor="middle" font-size="8" fill="#fff">Write ac, an</text>
+
+  <text x="265" y="890" text-anchor="middle" font-size="10" fill="#E41A1C" font-weight="bold">Repeat x 1.07M variants = 42+ seconds</text>
+
+  <!-- RIGHT: The smart way (FAST PATH) -->
+  <rect x="530" y="805" width="490" height="100" rx="10" fill="#F0FAF0" stroke="#1B9E77" stroke-width="2"/>
+  <use href="#check" x="540" y="810" width="18" height="18"/>
+  <text x="568" y="825" font-size="11" font-weight="bold" fill="#1B9E77">With FAST PATH (GraphMana)</text>
+
+  <!-- Show direct read of 5 values -->
+  <rect x="550" y="838" width="160" height="22" rx="4" fill="#1B9E77"/>
+  <text x="630" y="853" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">Read ac[0..4], an[0..4] directly</text>
+  <path d="M 712 849 L 730 849" stroke="#1B9E77" stroke-width="1.5" marker-end="url(#greenarrow)" fill="none"/>
+
+  <rect x="735" y="838" width="80" height="22" rx="4" fill="#1B9E77" opacity="0.7"/>
+  <text x="775" y="853" text-anchor="middle" font-size="8" fill="#fff">Write ac, an</text>
+
+  <!-- Skip label -->
+  <text x="630" y="876" font-size="9" fill="#1B9E77" font-weight="bold">gt_packed never touched!</text>
+  <text x="775" y="890" text-anchor="middle" font-size="10" fill="#1B9E77" font-weight="bold">Same loop x 1.07M variants = 0.6 seconds</text>
+
+  <!-- Big speed comparison -->
+  <use href="#bolt" x="470" y="855" width="18" height="27"/>
+  <text x="510" y="878" font-size="14" fill="#E6AB02" font-weight="bold">70x</text>
+</svg>

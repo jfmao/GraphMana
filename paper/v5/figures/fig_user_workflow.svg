@@ -1,0 +1,324 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1650" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+    </marker>
+    <marker id="redarrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#E41A1C"/>
+    </marker>
+    <marker id="greenarrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1B9E77"/>
+    </marker>
+    <!-- Warning triangle -->
+    <symbol id="warn" viewBox="0 0 24 24">
+      <path d="M12,2 L22,20 L2,20 Z" fill="#E41A1C" stroke="#fff" stroke-width="0.5"/>
+      <text x="12" y="17" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">!</text>
+    </symbol>
+    <!-- Clock -->
+    <symbol id="clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" fill="#E6AB02" stroke="#fff" stroke-width="1"/>
+      <line x1="12" y1="5" x2="12" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="17" y2="15" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <!-- Recycle / loop -->
+    <symbol id="loop" viewBox="0 0 24 24">
+      <path d="M12,4 A8,8 0 1,1 4,12" fill="none" stroke="#E41A1C" stroke-width="2.5"/>
+      <path d="M4,8 L4,13 L9,13" fill="none" stroke="#E41A1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <!-- File icon -->
+    <symbol id="file" viewBox="0 0 30 38">
+      <path d="M0,0 L20,0 L30,10 L30,38 L0,38 Z" fill="#66C2A5" stroke="#fff" stroke-width="0.8"/>
+      <path d="M20,0 L20,10 L30,10" fill="#4DAF4A" stroke="#fff" stroke-width="0.5"/>
+    </symbol>
+    <!-- Person -->
+    <symbol id="person" viewBox="0 0 20 28">
+      <circle cx="10" cy="6" r="5" fill="#E6AB02"/>
+      <path d="M2,28 L2,18 Q2,12 10,12 Q18,12 18,18 L18,28" fill="#E6AB02"/>
+    </symbol>
+    <!-- Question mark -->
+    <symbol id="question" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11" fill="#E41A1C"/>
+      <text x="12" y="17" text-anchor="middle" fill="#fff" font-size="15" font-weight="bold">?</text>
+    </symbol>
+  </defs>
+
+  <!-- ================================================================ -->
+  <!-- TITLE                                                            -->
+  <!-- ================================================================ -->
+  <text x="550" y="30" text-anchor="middle" font-size="22" font-weight="bold" fill="#333">A Population Genomics Data Manager's Year</text>
+  <text x="550" y="52" text-anchor="middle" font-size="13" fill="#888">The recurring cycle of merge, filter, convert, annotate, repeat</text>
+
+  <!-- Timeline line (central spine) -->
+  <line x1="100" y1="75" x2="100" y2="1600" stroke="#DDD" stroke-width="3"/>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 1: DATA RECEPTION AND QC                                   -->
+  <!-- ================================================================ -->
+  <!-- Phase label -->
+  <rect x="30" y="75" width="140" height="28" rx="14" fill="#377EB8"/>
+  <text x="100" y="94" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 1: First Data</text>
+
+  <!-- Step 1: Receive VCF -->
+  <circle cx="100" cy="130" r="12" fill="#377EB8" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="134" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">1</text>
+
+  <rect x="140" y="112" width="380" height="40" rx="8" fill="#E8F4FD" stroke="#377EB8" stroke-width="1.5"/>
+  <use href="#file" x="150" y="117" width="22" height="28"/>
+  <text x="182" y="130" font-size="11" fill="#377EB8" font-weight="bold">Receive first batch of VCF</text>
+  <text x="182" y="145" font-size="9" fill="#555">200 samples, whole genome, from sequencing facility</text>
+
+  <!-- Step 2: Inspect + QC -->
+  <circle cx="100" cy="178" r="12" fill="#377EB8" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="182" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">2</text>
+
+  <rect x="140" y="160" width="380" height="40" rx="8" fill="#E8F4FD" stroke="#377EB8" stroke-width="1.5"/>
+  <text x="155" y="178" font-size="11" fill="#377EB8" font-weight="bold">Quality control</text>
+  <text x="155" y="193" font-size="9" fill="#555">Per-sample: het rate, call rate, depth, sex check, duplicates</text>
+
+  <!-- Step 3: Filter -->
+  <circle cx="100" cy="226" r="12" fill="#377EB8" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="230" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">3</text>
+
+  <rect x="140" y="208" width="380" height="40" rx="8" fill="#E8F4FD" stroke="#377EB8" stroke-width="1.5"/>
+  <text x="155" y="226" font-size="11" fill="#377EB8" font-weight="bold">Variant filtering</text>
+  <text x="155" y="241" font-size="9" fill="#555">QUAL, depth, missingness, HWE, MAF, biallelic SNPs only</text>
+
+  <!-- Step 4: Population assignment -->
+  <circle cx="100" cy="274" r="12" fill="#377EB8" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="278" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">4</text>
+
+  <rect x="140" y="256" width="380" height="40" rx="8" fill="#E8F4FD" stroke="#377EB8" stroke-width="1.5"/>
+  <text x="155" y="274" font-size="11" fill="#377EB8" font-weight="bold">Population assignment + PCA verification</text>
+  <text x="155" y="289" font-size="9" fill="#555">Assign labels from metadata, verify with PCA/admixture</text>
+
+  <!-- Time annotation -->
+  <use href="#clock" x="540" y="118" width="18" height="18"/>
+  <text x="565" y="132" font-size="9" fill="#E6AB02">Week 1-2</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 2: ANNOTATION                                              -->
+  <!-- ================================================================ -->
+  <rect x="30" y="318" width="140" height="28" rx="14" fill="#E7298A"/>
+  <text x="100" y="337" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 2: Annotate</text>
+
+  <circle cx="100" cy="372" r="12" fill="#E7298A" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="376" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">5</text>
+
+  <rect x="140" y="354" width="380" height="40" rx="8" fill="#FCE4EC" stroke="#E7298A" stroke-width="1.5"/>
+  <text x="155" y="372" font-size="11" fill="#E7298A" font-weight="bold">Functional annotation (VEP / SnpEff)</text>
+  <text x="155" y="387" font-size="9" fill="#555">Consequence, impact, gene, protein change, SIFT, PolyPhen</text>
+
+  <circle cx="100" cy="420" r="12" fill="#E7298A" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="424" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">6</text>
+
+  <rect x="140" y="402" width="380" height="40" rx="8" fill="#FCE4EC" stroke="#E7298A" stroke-width="1.5"/>
+  <text x="155" y="420" font-size="11" fill="#E7298A" font-weight="bold">Clinical + database annotation</text>
+  <text x="155" y="435" font-size="9" fill="#555">ClinVar, dbSNP rsIDs, CADD scores, gnomAD frequencies</text>
+
+  <use href="#clock" x="540" y="370" width="18" height="18"/>
+  <text x="565" y="384" font-size="9" fill="#E6AB02">Week 2-3</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 3: FORMAT CONVERSION (the daily grind)                     -->
+  <!-- ================================================================ -->
+  <rect x="30" y="465" width="140" height="28" rx="14" fill="#D95F02"/>
+  <text x="100" y="484" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 3: Convert</text>
+
+  <circle cx="100" cy="520" r="12" fill="#D95F02" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="524" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">7</text>
+
+  <rect x="140" y="498" width="530" height="100" rx="8" fill="#FFF3E0" stroke="#D95F02" stroke-width="1.5"/>
+  <text x="155" y="516" font-size="11" fill="#D95F02" font-weight="bold">Format conversion (one script per format)</text>
+
+  <!-- Format boxes -->
+  <rect x="155" y="525" width="62" height="22" rx="4" fill="#D95F02"/>
+  <text x="186" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">PLINK</text>
+  <rect x="222" y="525" width="75" height="22" rx="4" fill="#D95F02"/>
+  <text x="260" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">EIGENSTRAT</text>
+  <rect x="302" y="525" width="62" height="22" rx="4" fill="#D95F02"/>
+  <text x="333" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">TreeMix</text>
+  <rect x="369" y="525" width="50" height="22" rx="4" fill="#D95F02"/>
+  <text x="394" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">SFS</text>
+  <rect x="424" y="525" width="60" height="22" rx="4" fill="#D95F02"/>
+  <text x="454" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">Beagle</text>
+  <rect x="489" y="525" width="80" height="22" rx="4" fill="#D95F02"/>
+  <text x="529" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">STRUCTURE</text>
+  <rect x="574" y="525" width="50" height="22" rx="4" fill="#D95F02" opacity="0.6"/>
+  <text x="599" y="540" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">BED</text>
+  <rect x="629" y="525" width="30" height="22" rx="4" fill="#D95F02" opacity="0.5"/>
+  <text x="644" y="540" text-anchor="middle" font-size="8" fill="#fff">...</text>
+
+  <text x="155" y="567" font-size="9" fill="#555">Each format requires a different script. Each must be re-run after any upstream change.</text>
+  <text x="155" y="581" font-size="9" fill="#555">Different subset for each tool: biallelic only, specific populations, MAF thresholds, regions...</text>
+
+  <use href="#clock" x="690" y="505" width="18" height="18"/>
+  <text x="715" y="519" font-size="9" fill="#E6AB02">Week 3-4</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 4: ANALYSIS + SUMMARY STATS                                -->
+  <!-- ================================================================ -->
+  <rect x="30" y="620" width="140" height="28" rx="14" fill="#66A61E"/>
+  <text x="100" y="639" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 4: Analyze</text>
+
+  <circle cx="100" cy="675" r="12" fill="#66A61E" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="679" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">8</text>
+
+  <rect x="140" y="653" width="530" height="90" rx="8" fill="#F0F7E8" stroke="#66A61E" stroke-width="1.5"/>
+  <text x="155" y="671" font-size="11" fill="#66A61E" font-weight="bold">Population genetics analyses + summary statistics</text>
+
+  <!-- Analysis cards -->
+  <rect x="155" y="680" width="55" height="20" rx="3" fill="#66A61E" opacity="0.8"/>
+  <text x="183" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">PCA</text>
+  <rect x="215" y="680" width="55" height="20" rx="3" fill="#66A61E" opacity="0.8"/>
+  <text x="243" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">Fst</text>
+  <rect x="275" y="680" width="80" height="20" rx="3" fill="#66A61E" opacity="0.8"/>
+  <text x="315" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">Admixture</text>
+  <rect x="360" y="680" width="80" height="20" rx="3" fill="#66A61E" opacity="0.8"/>
+  <text x="400" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">TreeMix</text>
+  <rect x="445" y="680" width="100" height="20" rx="3" fill="#66A61E" opacity="0.8"/>
+  <text x="495" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">Demography</text>
+  <rect x="550" y="680" width="100" height="20" rx="3" fill="#66A61E" opacity="0.7"/>
+  <text x="600" y="694" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">Selection</text>
+
+  <text x="155" y="720" font-size="9" fill="#555">Allele frequencies, SFS, nucleotide diversity (pi), Tajima's D, LD decay, het rates...</text>
+  <text x="155" y="733" font-size="9" fill="#555">Generate reports for PI, collaborators, grant reviews</text>
+
+  <use href="#clock" x="690" y="660" width="18" height="18"/>
+  <text x="715" y="674" font-size="9" fill="#E6AB02">Month 2-3</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 5: NEW BATCH ARRIVES (the pain begins)                     -->
+  <!-- ================================================================ -->
+  <rect x="30" y="770" width="140" height="28" rx="14" fill="#E41A1C"/>
+  <text x="100" y="789" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 5: New Batch!</text>
+
+  <circle cx="100" cy="825" r="14" fill="#E41A1C" stroke="#fff" stroke-width="2.5"/>
+  <text x="100" y="829" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold">9</text>
+
+  <rect x="140" y="805" width="530" height="48" rx="8" fill="#FFEBEE" stroke="#E41A1C" stroke-width="2"/>
+  <use href="#warn" x="150" y="812" width="20" height="20"/>
+  <text x="178" y="824" font-size="12" fill="#E41A1C" font-weight="bold">Batch 2 arrives: 150 new samples</text>
+  <text x="178" y="841" font-size="10" fill="#E41A1C">Must re-merge with Batch 1, regenerate the merged VCF from scratch</text>
+
+  <!-- The cascade of re-work -->
+  <circle cx="100" cy="878" r="12" fill="#E41A1C" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="882" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">10</text>
+
+  <rect x="140" y="862" width="530" height="36" rx="6" fill="#FFEBEE" stroke="#E41A1C" stroke-width="1"/>
+  <text x="155" y="880" font-size="10" fill="#E41A1C" font-weight="bold">Re-run QC</text>
+  <text x="265" y="880" font-size="9" fill="#555">on the new merged file (thresholds may change with more samples)</text>
+
+  <circle cx="100" cy="918" r="12" fill="#E41A1C" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="922" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">11</text>
+
+  <rect x="140" y="902" width="530" height="36" rx="6" fill="#FFEBEE" stroke="#E41A1C" stroke-width="1"/>
+  <text x="155" y="920" font-size="10" fill="#E41A1C" font-weight="bold">Re-filter</text>
+  <text x="230" y="920" font-size="9" fill="#555">entire dataset again</text>
+
+  <circle cx="100" cy="958" r="12" fill="#E41A1C" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="962" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">12</text>
+
+  <rect x="140" y="942" width="530" height="36" rx="6" fill="#FFEBEE" stroke="#E41A1C" stroke-width="1"/>
+  <text x="155" y="960" font-size="10" fill="#E41A1C" font-weight="bold">Re-annotate</text>
+  <text x="260" y="960" font-size="9" fill="#555">VEP/ClinVar on the new merged VCF</text>
+
+  <circle cx="100" cy="998" r="12" fill="#E41A1C" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1002" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">13</text>
+
+  <rect x="140" y="982" width="530" height="36" rx="6" fill="#FFEBEE" stroke="#E41A1C" stroke-width="1"/>
+  <text x="155" y="1000" font-size="10" fill="#E41A1C" font-weight="bold">Re-convert ALL formats</text>
+  <text x="345" y="1000" font-size="9" fill="#555">PLINK, EIGENSTRAT, TreeMix, SFS, Beagle, BED...</text>
+
+  <circle cx="100" cy="1038" r="12" fill="#E41A1C" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1042" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">14</text>
+
+  <rect x="140" y="1022" width="530" height="36" rx="6" fill="#FFEBEE" stroke="#E41A1C" stroke-width="1"/>
+  <text x="155" y="1040" font-size="10" fill="#E41A1C" font-weight="bold">Re-run ALL analyses</text>
+  <text x="330" y="1040" font-size="9" fill="#555">PCA, Fst, Admixture, TreeMix, demography...</text>
+
+  <!-- Time + pain annotation -->
+  <use href="#clock" x="690" y="812" width="18" height="18"/>
+  <text x="715" y="826" font-size="9" fill="#E41A1C" font-weight="bold">2-4 weeks lost</text>
+  <text x="715" y="840" font-size="8" fill="#E41A1C">repeating everything</text>
+
+  <!-- Loop arrow on the right side -->
+  <path d="M 690 860 Q 740 930 690 1000 Q 680 1020 690 1050" stroke="#E41A1C" stroke-width="2.5" fill="none" stroke-dasharray="6,3"/>
+  <use href="#loop" x="695" y="930" width="22" height="22"/>
+  <text x="720" y="940" font-size="9" fill="#E41A1C" font-weight="bold">Steps 10-14</text>
+  <text x="720" y="953" font-size="9" fill="#E41A1C" font-weight="bold">repeat every</text>
+  <text x="720" y="966" font-size="9" fill="#E41A1C" font-weight="bold">new batch!</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 6: ONGOING REQUESTS (months 4-12)                          -->
+  <!-- ================================================================ -->
+  <rect x="30" y="1080" width="140" height="28" rx="14" fill="#7570B3"/>
+  <text x="100" y="1099" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 6: Requests</text>
+
+  <circle cx="100" cy="1135" r="12" fill="#7570B3" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1139" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">15</text>
+
+  <rect x="140" y="1117" width="430" height="40" rx="8" fill="#F5F0FA" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="155" y="1135" font-size="10" fill="#7570B3" font-weight="bold">Collaborator wants a subset</text>
+  <text x="155" y="1150" font-size="9" fill="#555">"Send me just the African samples in PLINK format, biallelic only"</text>
+
+  <circle cx="100" cy="1183" r="12" fill="#7570B3" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1187" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">16</text>
+
+  <rect x="140" y="1165" width="430" height="40" rx="8" fill="#F5F0FA" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="155" y="1183" font-size="10" fill="#7570B3" font-weight="bold">Reviewer asks for re-analysis</text>
+  <text x="155" y="1198" font-size="9" fill="#555">"Repeat with MAF &gt; 0.01 instead of 0.05" -- regenerate everything</text>
+
+  <circle cx="100" cy="1231" r="12" fill="#7570B3" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1235" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">17</text>
+
+  <rect x="140" y="1213" width="430" height="40" rx="8" fill="#F5F0FA" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="155" y="1231" font-size="10" fill="#7570B3" font-weight="bold">Annotation database update</text>
+  <text x="155" y="1246" font-size="9" fill="#555">New ClinVar release quarterly: must re-annotate entire VCF (96+ seconds)</text>
+
+  <circle cx="100" cy="1279" r="12" fill="#7570B3" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1283" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">18</text>
+
+  <rect x="140" y="1261" width="430" height="40" rx="8" fill="#F5F0FA" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="155" y="1279" font-size="10" fill="#7570B3" font-weight="bold">Liftover to new genome build</text>
+  <text x="155" y="1294" font-size="9" fill="#555">GRCh37 to GRCh38: remap coordinates, re-annotate, re-export all formats</text>
+
+  <circle cx="100" cy="1327" r="12" fill="#7570B3" stroke="#fff" stroke-width="2"/>
+  <text x="100" y="1331" text-anchor="middle" font-size="8" fill="#fff" font-weight="bold">19</text>
+
+  <rect x="140" y="1309" width="430" height="40" rx="8" fill="#F5F0FA" stroke="#7570B3" stroke-width="1.5"/>
+  <text x="155" y="1327" font-size="10" fill="#7570B3" font-weight="bold">Batch 3, 4, 5 arrive over the year...</text>
+  <text x="155" y="1342" font-size="9" fill="#555">Each triggers the full merge-filter-annotate-convert-analyze cycle again</text>
+
+  <use href="#clock" x="590" y="1123" width="18" height="18"/>
+  <text x="615" y="1137" font-size="9" fill="#E6AB02">Months 4-12</text>
+
+  <!-- ================================================================ -->
+  <!-- PHASE 7: PROVENANCE NIGHTMARES                                   -->
+  <!-- ================================================================ -->
+  <rect x="30" y="1375" width="140" height="28" rx="14" fill="#E41A1C"/>
+  <text x="100" y="1394" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Phase 7: Provenance</text>
+
+  <rect x="140" y="1415" width="530" height="160" rx="10" fill="#FFEBEE" stroke="#E41A1C" stroke-width="2"/>
+  <use href="#question" x="150" y="1422" width="22" height="22"/>
+  <text x="180" y="1438" font-size="12" fill="#E41A1C" font-weight="bold">The questions no one can answer:</text>
+
+  <text x="165" y="1462" font-size="10" fill="#E41A1C">"Which VCF did I use for that TreeMix run in March?"</text>
+  <text x="165" y="1482" font-size="10" fill="#E41A1C">"Were the soft-deleted samples excluded from the SFS I sent to Dr. Smith?"</text>
+  <text x="165" y="1502" font-size="10" fill="#E41A1C">"What filters were applied to the PLINK file for the GWAS?"</text>
+  <text x="165" y="1522" font-size="10" fill="#E41A1C">"Can you re-create the EIGENSTRAT file from January but with updated ClinVar?"</text>
+  <text x="165" y="1542" font-size="10" fill="#E41A1C">"A student left. Their directory has 47 VCF files. Which is the final one?"</text>
+  <text x="165" y="1562" font-size="10" fill="#E41A1C">"The reviewer wants us to prove we used the same samples across all analyses."</text>
+
+  <!-- Person icon - stressed -->
+  <use href="#person" x="700" y="1430" width="22" height="30"/>
+  <text x="712" y="1475" text-anchor="middle" font-size="18">&#x1F630;</text>
+  <text x="712" y="1498" text-anchor="middle" font-size="9" fill="#E6AB02">Data</text>
+  <text x="712" y="1510" text-anchor="middle" font-size="9" fill="#E6AB02">Manager</text>
+
+  <!-- ================================================================ -->
+  <!-- BOTTOM SUMMARY                                                   -->
+  <!-- ================================================================ -->
+  <rect x="80" y="1595" width="940" height="45" rx="10" fill="#FFEBEE" stroke="#E41A1C" stroke-width="2"/>
+  <text x="550" y="1614" text-anchor="middle" font-size="12" fill="#E41A1C" font-weight="bold">Over a typical project lifetime: 5-15 merge cycles, 50+ format conversions, 200+ intermediate files,</text>
+  <text x="550" y="1632" text-anchor="middle" font-size="12" fill="#E41A1C" font-weight="bold">and zero systematic provenance tracking. This is the problem GraphMana solves.</text>
+</svg>

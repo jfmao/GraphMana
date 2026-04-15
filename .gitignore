@@ -86,4 +86,38 @@ desktop.ini
 # Environment
 .env
 .env.local
-paper/
+# Paper drafts — track only paper/v5/ sources, ignore build artifacts and older
+# versions. To add a new figure to the tracked set, append a matching
+# "!paper/v5/figures/<basename>.svg" (and .pdf) line below.
+paper/*
+!paper/v5
+paper/v5/*
+!paper/v5/graphmana_nature.tex
+!paper/v5/supplementary.tex
+!paper/v5/sn-jnl.cls
+!paper/v5/sn-nature.bst
+!paper/v5/figures
+paper/v5/figures/*
+
+# Figure sources and their build products (SVG is authoritative; PDF is
+# committed so LaTeX builds out of the box on a fresh clone).
+!paper/v5/figures/fig1_architecture.svg
+!paper/v5/figures/fig1_architecture.pdf
+!paper/v5/figures/fig2_benchmark_ggplot.svg
+!paper/v5/figures/fig2_benchmark_ggplot.pdf
+!paper/v5/figures/fig2_benchmark.R
+!paper/v5/figures/fig_cli_tree.svg
+!paper/v5/figures/fig_cli_tree.pdf
+!paper/v5/figures/fig_cli_tree.py
+!paper/v5/figures/fig_fast_path_explained.svg
+!paper/v5/figures/fig_fast_path_explained.pdf
+!paper/v5/figures/fig_full_path_explained.svg
+!paper/v5/figures/fig_full_path_explained.pdf
+!paper/v5/figures/fig_user_workflow.svg
+!paper/v5/figures/fig_user_workflow.pdf
+!paper/v5/figures/fig_user_workflow_graphmana.svg
+!paper/v5/figures/fig_user_workflow_graphmana.pdf
+!paper/v5/figures/fig_vcf_to_graph.svg
+!paper/v5/figures/fig_vcf_to_graph.pdf
+!paper/v5/figures/Supp_Figure_8_vcf_graph_mapping.svg
+!paper/v5/figures/Supp_Figure_8_vcf_graph_mapping.pdf
