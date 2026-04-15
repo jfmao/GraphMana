@@ -193,20 +193,52 @@ class TestExtendExistingVariants:
 class TestCreateNewVariants:
     """Test creation of brand-new variant nodes."""
 
-    def test_homref_padding_correct(self):
-        """New variant has HomRef padding for existing samples."""
-        from graphmana.ingest.array_ops import pad_gt_for_new_variant
+    def test_missing_padding_default(self):
+        """New variant pads existing samples as Missing (v1.1 default).
+
+        This is the pop-gen-correct behavior: existing samples have no data
+        at a batch-2-specific site, so they contribute nothing to the
+        denominator. The called_packed mask marks them as "not interrogated".
+        """
+        from graphmana.ingest.array_ops import (
+            pad_called_for_new_variant,
+            pad_gt_for_new_variant,
+        )
+        from graphmana.ingest.genotype_packer import unpack_called_packed
 
         # 4 existing samples, 2 new (Het, HomAlt)
         new_gt = np.array([1, 3], dtype=np.int8)
         result = pad_gt_for_new_variant(4, new_gt)
         unpacked = unpack_genotypes(result, 6)
 
-        # First 4 should be HomRef (0)
-        np.testing.assert_array_equal(unpacked[:4], np.zeros(4, dtype=np.int8))
+        # First 4 should be Missing (3)
+        np.testing.assert_array_equal(unpacked[:4], np.full(4, 3, dtype=np.int8))
         # Next 2 should be Het (1) and HomAlt (2)
-        assert unpacked[4] == 1  # Het
-        assert unpacked[5] == 2  # HomAlt
+        assert unpacked[4] == 1
+        assert unpacked[5] == 2
+
+        # called_packed: first 4 bits cleared, last 2 set (both new samples have real calls)
+        called = pad_called_for_new_variant(4, new_gt)
+        cm = unpack_called_packed(called, 6)
+        np.testing.assert_array_equal(cm, np.array([0, 0, 0, 0, 1, 1], dtype=np.uint8))
+
+    def test_legacy_homref_padding_opt_in(self):
+        """Legacy mode preserves the v1.0 "absent = HomRef" semantics."""
+        from graphmana.ingest.array_ops import (
+            pad_called_for_new_variant,
+            pad_gt_for_new_variant,
+        )
+        from graphmana.ingest.genotype_packer import unpack_called_packed
+
+        new_gt = np.array([1, 3], dtype=np.int8)
+        result = pad_gt_for_new_variant(4, new_gt, assume_homref=True)
+        unpacked = unpack_genotypes(result, 6)
+        np.testing.assert_array_equal(unpacked[:4], np.zeros(4, dtype=np.int8))
+        assert unpacked[4] == 1 and unpacked[5] == 2
+
+        called = pad_called_for_new_variant(4, new_gt, assume_homref=True)
+        cm = unpack_called_packed(called, 6)
+        np.testing.assert_array_equal(cm, np.ones(6, dtype=np.uint8))
 
     def test_phase_padding_correct(self):
         """New variant has zero phase padding for existing samples."""

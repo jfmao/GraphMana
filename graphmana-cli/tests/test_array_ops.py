@@ -188,20 +188,35 @@ class TestExtendPloidyPacked:
 
 
 class TestPadGtForNewVariant:
-    """Test creating gt_packed for new variants with HomRef padding."""
+    """Test creating gt_packed for new variants.
 
-    def test_basic_padding(self):
-        """4 existing HomRef + 2 new samples."""
+    Default (v1.1, pop-gen correct): existing samples are padded with Missing
+    (code 3), because the current input batch carries no information about
+    their genotype at the new site. Allele frequency denominators honor this
+    via the called_packed mask. Legacy "assume HomRef" semantics remain
+    available via ``assume_homref=True`` for fixed-site-list workflows.
+    """
+
+    def test_basic_padding_missing_default(self):
+        """4 existing Missing + 2 new samples (v1.1 default)."""
         new_gt = np.array([1, 3], dtype=np.int8)  # Het, HomAlt
         result = pad_gt_for_new_variant(4, new_gt)
         unpacked = unpack_genotypes(result, 6)
 
-        # 4 HomRef (0) + Het (1) + HomAlt (2)
+        # 4 Missing (3) + Het (1) + HomAlt (2)
+        expected = np.array([3, 3, 3, 3, 1, 2], dtype=np.int8)
+        np.testing.assert_array_equal(unpacked, expected)
+
+    def test_basic_padding_legacy_homref(self):
+        """Legacy mode preserves the v1.0 "absent = HomRef" assumption."""
+        new_gt = np.array([1, 3], dtype=np.int8)  # Het, HomAlt
+        result = pad_gt_for_new_variant(4, new_gt, assume_homref=True)
+        unpacked = unpack_genotypes(result, 6)
         expected = np.array([0, 0, 0, 0, 1, 2], dtype=np.int8)
         np.testing.assert_array_equal(unpacked, expected)
 
     def test_zero_existing(self):
-        """No existing samples — just new samples."""
+        """No existing samples — just new samples, padding mode is irrelevant."""
         new_gt = np.array([0, 1, 3, 2], dtype=np.int8)
         result = pad_gt_for_new_variant(0, new_gt)
         unpacked = unpack_genotypes(result, 4)
@@ -213,7 +228,8 @@ class TestPadGtForNewVariant:
         new_gt = np.array([3, 2], dtype=np.int8)
         result = pad_gt_for_new_variant(3, new_gt)
         unpacked = unpack_genotypes(result, 5)
-        expected = np.array([0, 0, 0, 2, 3], dtype=np.int8)
+        # Default: existing → Missing (3)
+        expected = np.array([3, 3, 3, 2, 3], dtype=np.int8)
         np.testing.assert_array_equal(unpacked, expected)
 
 
