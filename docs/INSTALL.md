@@ -172,7 +172,7 @@ GraphMana-managed Neo4j on different ports (see below).
 If the target machine cannot reach the internet, download the Neo4j tarball
 on a machine that can and transfer it:
 
-1. Download from the [GraphMana Zenodo deposit](https://doi.org/10.5281/zenodo.19603203)
+1. Download from the [GraphMana Zenodo deposit](https://doi.org/10.5281/zenodo.19472835)
    or from `https://dist.neo4j.org/neo4j-community-5.26.0-unix.tar.gz`.
 2. Transfer to the target machine.
 3. Run:

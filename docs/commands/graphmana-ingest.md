@@ -55,6 +55,11 @@ Options:
   --dataset-id TEXT               Dataset identifier.
   --on-duplicate [error|skip]     Action when duplicate samples found
                                   (incremental mode).
+  --assume-homref-on-missing      Legacy: pad absent samples as HomRef rather
+                                  than Missing. Use only with fixed-site-list
+                                  workflows (imputed panels, arrays). Default
+                                  preserves the HomRef-vs-Missing distinction
+                                  via called_packed. See docs/gvcf-workflow.md.
   --include-filtered              Include variants with FILTER != PASS
                                   (default: exclude).
   --verbose / --quiet             Verbose logging.

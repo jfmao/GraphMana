@@ -43,16 +43,16 @@ One node per biallelic variant site. Multi-allelic sites are split during import
     // === Packed Genotype Arrays ===
     gt_packed: byte[],              // 2 bits/sample, 4 samples/byte, LSB-first
                                     // Encoding: 00=HomRef, 01=Het, 10=HomAlt, 11=Missing
-                                    // v1.1: may be wrapped in a tagged blob (0x00 dense | 0x01 sparse)
+                                    // May be wrapped in a tagged blob (0x00 dense | 0x01 sparse)
     phase_packed: byte[],           // 1 bit/sample, 8 samples/byte, LSB-first
                                     // Which haplotype carries ALT for Het sites
     ploidy_packed: byte[],          // 1 bit/sample, 8 samples/byte
                                     // Bit=1 means haploid. NULL = all diploid (autosome default)
-    called_packed: byte[],          // v1.1: 1 bit/sample, 8 samples/byte, LSB-first
+    called_packed: byte[],          // 1 bit/sample, 8 samples/byte, LSB-first
                                     // 1 = sample was interrogated at this site; 0 = not looked at
                                     // Preserves HomRef-vs-Missing across incremental batches.
-                                    // NULL on schema v1.0 databases (treated as "all called").
-    gt_encoding: STRING,            // v1.1: "dense" (default) or "sparse_v1"
+                                    // NULL on databases created before called_packed was added (treated as "all called").
+    gt_encoding: STRING,            // "dense" (default) or "sparse_v1"
                                     // Chosen per-variant; decoder dispatches on this + the tag byte.
 
     // === Ancestral State ===
@@ -88,8 +88,8 @@ One node per biallelic variant site. Multi-allelic sites are split during import
 - `gt_packed` size = ceil(N_samples / 4) bytes (dense) or compact sparse blob when chosen
 - `phase_packed` size = ceil(N_samples / 8) bytes
 - `ploidy_packed` is NULL for autosomes (zero storage overhead)
-- `called_packed` size = ceil(N_samples / 8) bytes. NULL on schema v1.0 databases — helpers interpret NULL as "all samples called". Run `graphmana migrate --to-v1.1` to back-fill an explicit all-ones mask. See `docs/gvcf-workflow.md` for the pop-gen rationale.
-- `gt_encoding` selects the decoder path. Dense (`"dense"` or `null`) is the v1.0-compatible layout; sparse (`"sparse_v1"`) is an optional per-variant optimization that kicks in automatically for variants dominated by HomRef samples.
+- `called_packed` size = ceil(N_samples / 8) bytes. NULL on databases created before the property was added — helpers interpret NULL as "all samples called". Run `graphmana migrate` to back-fill an explicit all-ones mask. See `docs/gvcf-workflow.md` for the pop-gen rationale.
+- `gt_encoding` selects the decoder path. Dense (`"dense"` or `null`) is the standard layout; sparse (`"sparse_v1"`) is an optional per-variant optimization that kicks in automatically for variants dominated by HomRef samples.
 
 ### Sample
 

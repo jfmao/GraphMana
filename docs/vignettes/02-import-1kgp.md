@@ -22,6 +22,18 @@ Verify with:
 graphmana check-filesystem --neo4j-data-dir /local/scratch/neo4j_data
 ```
 
+## Recommended upstream workflow for growing cohorts
+
+If you plan to add samples incrementally over time (e.g., as new sequencing
+batches arrive), joint-call from per-sample gVCFs before importing. This
+preserves the distinction between "called HomRef" and "not interrogated" at
+every variant site, which matters for allele-frequency accuracy and PCA
+batch-effect avoidance. See `docs/gvcf-workflow.md` for the full pipeline:
+gVCF → GenomicsDB/GLnexus → joint-called VCF → `graphmana ingest`.
+
+The 1KGP dataset used here was already jointly called by the 1000 Genomes
+consortium, so no additional joint-calling step is needed.
+
 ## Step 1: Download 1KGP data
 
 Download the per-chromosome VCF files and the sample panel from the 1KGP FTP

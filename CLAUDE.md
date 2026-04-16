@@ -342,6 +342,7 @@ Export filters on graph properties pushed into Cypher WHERE clauses.
   --threads INT, --batch-size INT, --output-csv-dir PATH
   --neo4j-uri, --neo4j-user, --neo4j-password
   --auto-start-neo4j, --neo4j-home PATH, --neo4j-data-dir PATH
+  --assume-homref-on-missing    # Legacy: pad absent samples as HomRef (default: Missing)
   (all --filter-* import filters)
   --dry-run, --verbose / --quiet
 ```
@@ -391,12 +392,17 @@ Export filters on graph properties pushed into Cypher WHERE clauses.
   graphmana migrate [--dry-run]
 ```
 
-### graphmana setup-neo4j, neo4j-start, neo4j-stop, check-filesystem
+### graphmana setup-neo4j, neo4j-start, neo4j-stop, check-filesystem, doctor
 ```
-  graphmana setup-neo4j --install-dir PATH [--memory-auto]
-  graphmana neo4j-start --neo4j-home PATH --data-dir PATH [--wait]
-  graphmana neo4j-stop --neo4j-home PATH
+  graphmana setup-neo4j --install-dir PATH --password TEXT
+    [--memory-auto] [--version TEXT] [--data-dir PATH]
+    [--install-java] [--skip-download] [--neo4j-tarball PATH]
+    [--deploy-plugin PATH] [--bolt-port INT] [--http-port INT]
+    [--adopt [--i-understand-this-restarts-neo4j]]
+  graphmana neo4j-start [--neo4j-home PATH] [--data-dir PATH] [--wait]
+  graphmana neo4j-stop [--neo4j-home PATH]
   graphmana check-filesystem --neo4j-data-dir PATH
+  graphmana doctor [--verbose/--quiet]
 ```
 
 ---

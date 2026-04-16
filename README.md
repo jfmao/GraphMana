@@ -1,4 +1,4 @@
-# GraphMana
+# GraphMana v1.1.0
 
 **Graph-native data management platform for population genomics.**
 
@@ -39,7 +39,7 @@ This installs conda (if needed), Python, Java, Neo4j, and GraphMana in one step.
 conda create -n graphmana -c conda-forge -c bioconda python=3.12 cyvcf2 openjdk=21 -y
 conda activate graphmana
 pip install graphmana
-graphmana setup-neo4j --install-dir ~/neo4j --memory-auto
+graphmana setup-neo4j --install-dir ~/neo4j --memory-auto --password mypassword
 ```
 
 The Java procedures JAR is **bundled with the Python package** — no Maven build needed.
@@ -84,7 +84,7 @@ cd graphmana-cli && pip install -e ".[dev]" && cd ..
 cd graphmana-cli && pytest -v && cd ..
 
 # Setup Neo4j
-graphmana setup-neo4j --install-dir ~/neo4j --memory-auto
+graphmana setup-neo4j --install-dir ~/neo4j --memory-auto --password mypassword
 ```
 
 ## Quick Start
@@ -176,7 +176,7 @@ GraphMana is built on graph database technology (currently Neo4j Community Editi
 
 Benchmark data and a pre-built 1000 Genomes Project chr22 database (3,202 samples, 1.07M variants) are deposited at Zenodo:
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19472836.svg)](https://doi.org/10.5281/zenodo.19472836)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19472835.svg)](https://doi.org/10.5281/zenodo.19472835)
 
 ## License
 

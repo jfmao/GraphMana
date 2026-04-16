@@ -37,12 +37,33 @@ pip install graphmana-cli
 
 ### Step 2: Install Neo4j in User Space
 
+If the cluster has internet access:
+
 ```bash
 graphmana setup-neo4j \
     --install-dir $HOME/neo4j \
     --data-dir /scratch/$USER/graphmana_db \
-    --memory-auto
+    --memory-auto \
+    --password mypassword
 ```
+
+**Air-gapped clusters (no internet):** download the Neo4j tarball on a
+machine with access (from the
+[GraphMana Zenodo deposit](https://doi.org/10.5281/zenodo.19472835) or
+`https://dist.neo4j.org/neo4j-community-5.26.0-unix.tar.gz`), transfer it
+to the cluster, and run:
+
+```bash
+graphmana setup-neo4j \
+    --install-dir $HOME/neo4j \
+    --neo4j-tarball /path/to/neo4j-community-5.26.0-unix.tar.gz \
+    --data-dir /scratch/$USER/graphmana_db \
+    --memory-auto \
+    --password mypassword
+```
+
+See [INSTALL.md — Offline install](../INSTALL.md#offline--air-gapped-install)
+for the full recipe.
 
 Expected output:
 
