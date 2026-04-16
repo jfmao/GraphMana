@@ -181,6 +181,17 @@ Schema version:   0.1.0
 Reference genome: GRCh38
 ```
 
+Alternatively, if you used `graphmana setup-neo4j` directly (instead of
+`graphmana init`), the setup writes `~/.graphmana/config.yaml` with the
+Neo4j home, password, and ports — so you no longer need `--neo4j-home` or
+`--neo4j-password` on subsequent commands.
+
+To verify the full installation health (Java, Neo4j, plugin, ports, config):
+
+```bash
+graphmana doctor
+```
+
 ## Step 7: Export to TreeMix (FAST PATH)
 
 TreeMix export reads pre-computed population allele count arrays. It does not

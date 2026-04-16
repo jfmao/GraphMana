@@ -95,6 +95,21 @@ Result: PASS -- suitable for Neo4j data storage.
 
 If the check reports a network filesystem, move your data directory to node-local storage.
 
+### Step 4: Verify the full installation
+
+The `doctor` command runs all pre-flight checks in one shot — Java version,
+Neo4j home, bolt port, plugin JAR, config file, data directory filesystem,
+and password strength:
+
+```bash
+graphmana doctor
+```
+
+The `setup-neo4j` command writes `~/.graphmana/config.yaml` with the Neo4j
+home, password, and ports, so subsequent commands (`neo4j-start`, `ingest`,
+`export`, etc.) no longer need `--neo4j-home` or `--neo4j-password` on every
+invocation.
+
 ## Deployment Model 1: Dedicated Node
 
 Best for labs with sysadmin support. Neo4j runs as a persistent service on a fixed node; users connect from any cluster node.
