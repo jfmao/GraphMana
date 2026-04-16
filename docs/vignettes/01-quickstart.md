@@ -28,7 +28,7 @@ graphmana --version
 **Expected output:**
 
 ```
-graphmana, version 1.0.0-dev
+graphmana, version 1.1.0
 ```
 
 ## Step 2: Initialize a project
@@ -166,7 +166,7 @@ graphmana status
 **Expected output:**
 
 ```
-GraphMana v1.0.0-dev
+GraphMana v1.1.0
 Connected to: bolt://localhost:7687
 
 Node counts:

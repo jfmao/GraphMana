@@ -42,8 +42,8 @@ Processing:
   Threads:        1
 
 Version:
-  GraphMana:      1.0.0-dev
-  Schema:         0.1.0
+  GraphMana:      1.1.0
+  Schema:         1.1
 
 Environment variables:
   GRAPHMANA_NEO4J_PASSWORD         (not set)

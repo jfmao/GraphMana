@@ -20,8 +20,8 @@ No options. This command does not connect to Neo4j.
 
 ```
 $ graphmana version
-GraphMana:      1.0.0-dev
-Schema version: 0.1.0
+GraphMana:      1.1.0
+Schema version: 1.1
 Python:         3.12.4
 cyvcf2:         0.32.1
 NumPy:          1.26.4
