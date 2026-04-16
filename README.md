@@ -157,20 +157,20 @@ See [Command Reference](docs/commands/index.md) for the full documentation.
 ## Documentation
 
 - **[Installation Guide](docs/INSTALL.md)** — 5 installation methods, no admin needed
-- **[Command Reference](docs/commands/index.md)** — 65 command reference pages
-- **[Vignettes](docs/vignettes/index.md)** — 11 tutorial vignettes
+- **[Command Reference](docs/commands/index.md)** — 67 command reference pages
+- **[Vignettes](docs/vignettes/index.md)** — 12 tutorial vignettes
 - **[Cluster Deployment](docs/vignettes/08-cluster-hpc.md)** — SLURM/PBS guide
 
 ## Architecture
 
-GraphMana is built on graph database technology (currently Neo4j Community Edition, free and open source). The companion [GraphPop](https://github.com/jfmao/GraphPop) engine provides graph-native analytical computation (population statistics, selection scans, annotation-conditioned queries) on the same persistent database.
+GraphMana is built on graph database technology (currently Neo4j Community Edition, free and open source). The companion [GraphPop](https://github.com/jfmao/GraphPop) engine ([bioRxiv preprint](https://doi.org/10.64898/2026.04.11.717929v1)) provides graph-native analytical computation (population statistics, selection scans, annotation-conditioned queries) on the same persistent database.
 
 ## Software Stack
 
 - **Database**: Neo4j Community 5.x (graph database)
 - **Java plugin**: Pre-built JAR bundled with Python package (31 KB)
-- **Python CLI**: Python 3.11+, cyvcf2, numpy, Click (21,267 lines)
-- **Testing**: 1,439 unit and integration tests (pytest)
+- **Python CLI**: Python 3.11+, cyvcf2, numpy, Click (~21,000 lines)
+- **Testing**: 1,451 unit and integration tests (pytest)
 
 ## Data and Benchmarks
 
@@ -186,4 +186,4 @@ MIT License. See [LICENSE](LICENSE).
 
 If you use GraphMana in your research, please cite:
 
-> Mao, J. GraphMana: graph-native data management for population genomics projects. *bioRxiv* (2026). [DOI pending]
+> Estaji, E. et al. GraphMana: graph-native data management for population genomics projects. *bioRxiv* (2026). [https://doi.org/10.64898/2026.04.11.717925v1](https://doi.org/10.64898/2026.04.11.717925v1)
