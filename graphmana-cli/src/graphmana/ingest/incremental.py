@@ -445,12 +445,10 @@ class IncrementalIngester:
                     existing_ploidy = bytes(existing_ploidy)
                 # called_packed may be None on schema v1.0 databases — helpers
                 # interpret None as "all existing samples called".
-                existing_called = rec.get("called_packed") if hasattr(rec, "get") else rec["called_packed"]  # noqa: E501
+                existing_called = rec["called_packed"]
                 if existing_called is not None:
                     existing_called = bytes(existing_called)
-                existing_gt_encoding = (
-                    rec.get("gt_encoding") if hasattr(rec, "get") else rec["gt_encoding"]
-                )
+                existing_gt_encoding = rec["gt_encoding"]
 
                 # Extend packed arrays
                 new_gt = extend_gt_packed(existing_gt, n_existing, vdata.gt_types)

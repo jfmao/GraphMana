@@ -252,6 +252,7 @@ def run_incremental_from_csv(
     source_file: str = "",
     database: str = "neo4j",
     threads: int = 1,
+    assume_homref_on_missing: bool = False,
 ) -> dict:
     """Incremental import via CSV-to-CSV: reads existing CSV directly, no Neo4j.
 
@@ -880,6 +881,7 @@ def run_incremental_rebuild(
     database: str = "neo4j",
     threads: int = 1,
     filter_config: dict | None = None,
+    assume_homref_on_missing: bool = False,
 ) -> dict:
     """Run incremental import via export-extend-reimport.
 

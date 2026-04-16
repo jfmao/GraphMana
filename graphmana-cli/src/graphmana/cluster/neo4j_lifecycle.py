@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 NEO4J_DEFAULT_BOLT_PORT = 7687
 NEO4J_DEFAULT_HTTP_PORT = 7474
 NEO4J_DOWNLOAD_URL_TEMPLATE = "https://dist.neo4j.org/neo4j-community-{version}-unix.tar.gz"
+# Note: auto-download uses 5.26.2; the Zenodo deposit (DOI 10.5281/zenodo.19603203)
+# hosts 5.26.0. Both are 5.26.x and compatible. The tarball validator accepts any
+# 5.26.x version. Update the Zenodo tarball when a security patch warrants it.
 NEO4J_DEFAULT_VERSION = "5.26.2"
 _TARBALL_RE = re.compile(r"neo4j-community-(5\.26\.\d+)-unix\.tar\.gz$")
 
@@ -204,6 +207,7 @@ def setup_neo4j(
     bolt_port: int = NEO4J_DEFAULT_BOLT_PORT,
     http_port: int = NEO4J_DEFAULT_HTTP_PORT,
     password: str | None = None,
+    skip_port_check: bool = False,
 ) -> dict:
     """Download and configure Neo4j Community for user-space operation.
 
@@ -232,11 +236,12 @@ def setup_neo4j(
     install_dir = Path(install_dir)
     install_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- Port check (fail early) ----
-    check_port_available(bolt_port, http_port)
+    # ---- Port check (fail early, skipped on adopt path) ----
+    if not skip_port_check:
+        check_port_available(bolt_port, http_port)
 
     # ---- Java check ----
-    java_version = _check_java()
+    java_version = check_java()
 
     # ---- Determine version from tarball if provided ----
     if neo4j_tarball is not None:
@@ -508,7 +513,7 @@ def auto_memory_config() -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _check_java() -> str:
+def check_java() -> str:
     """Check that Java 21+ is available.
 
     Returns the java version string.

@@ -350,21 +350,21 @@ class BaseExporter(ABC):
         if isinstance(called_packed, (list, bytearray)):
             called_packed = bytes(called_packed)
 
-        # Determine sample count from the (decoded) dense blob length.
-        # For v1.0 databases or dense-tagged v1.1 blobs this is
-        # len(gt_packed) * 4. For sparse-tagged blobs we decode through the
-        # helper using an initial guess and then adjust.
-        if gt_packed and gt_packed[0] == 0x01:
-            # Sparse blob: the header stores authoritative n_samples.
-            stored_n = int.from_bytes(gt_packed[1:5], "little")
-            gt_packed = decode_gt_blob(gt_packed, stored_n)
-            n_total = stored_n
-        else:
-            n_total = len(gt_packed) * 4
-            # Strip dense tag if present before raw unpack.
-            if gt_packed and gt_packed[0] == 0x00 and len(gt_packed) == n_total + 1:
-                gt_packed = gt_packed[1:]
-                n_total = len(gt_packed) * 4
+        # Decode the gt_packed blob through the central decoder, which
+        # handles all three storage formats safely:
+        #   - v1.0 legacy (bare dense bytes, no tag)
+        #   - v1.1 dense-tagged (0x00 + dense bytes)
+        #   - v1.1 sparse-tagged (0x01 + compact payload)
+        # The decoder needs an authoritative sample count. For dense and
+        # legacy blobs, ceil(N/4) == len(blob) so N <= len(blob)*4. For
+        # sparse blobs the header stores N. We use the maximum packed_index
+        # as a lower bound and let decode_gt_blob reconcile.
+        n_total = int(packed_indices[-1]) + 1 if len(packed_indices) > 0 else 0
+        # For legacy/dense, the blob length gives the upper bound.
+        dense_candidate = len(gt_packed) * 4
+        if dense_candidate > n_total:
+            n_total = dense_candidate
+        gt_packed = decode_gt_blob(gt_packed, n_total)
         gt_all = unpack_genotypes(gt_packed, n_total)
         phase_all = (
             unpack_phase(phase_packed, n_total)

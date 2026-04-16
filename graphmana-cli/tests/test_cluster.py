@@ -269,19 +269,19 @@ class TestAutoMemoryConfig:
 class TestCheckJava:
     @patch("subprocess.run")
     def test_java_21_passes(self, mock_run):
-        from graphmana.cluster.neo4j_lifecycle import _check_java
+        from graphmana.cluster.neo4j_lifecycle import check_java
 
         mock_run.return_value = MagicMock(
             returncode=0,
             stderr='openjdk version "21.0.1" 2023-10-17\n',
             stdout="",
         )
-        version = _check_java()
+        version = check_java()
         assert "21" in version
 
     @patch("subprocess.run")
     def test_java_17_fails(self, mock_run):
-        from graphmana.cluster.neo4j_lifecycle import _check_java
+        from graphmana.cluster.neo4j_lifecycle import check_java
 
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -289,14 +289,14 @@ class TestCheckJava:
             stdout="",
         )
         with pytest.raises(RuntimeError, match="Java 17.*requires Java 21"):
-            _check_java()
+            check_java()
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     def test_java_not_found(self, mock_run):
-        from graphmana.cluster.neo4j_lifecycle import _check_java
+        from graphmana.cluster.neo4j_lifecycle import check_java
 
         with pytest.raises(RuntimeError, match="Java not found"):
-            _check_java()
+            check_java()
 
 
 # ---------------------------------------------------------------------------

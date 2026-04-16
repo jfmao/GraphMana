@@ -13,6 +13,7 @@ from graphmana.cluster.filesystem_check import (
 from graphmana.cluster.neo4j_lifecycle import (
     PortConflictError,
     auto_memory_config,
+    check_java,
     check_port_available,
     detect_running_neo4j,
     probe_port,
@@ -28,6 +29,7 @@ __all__ = [
     "detect_filesystem_type",
     "is_network_filesystem",
     "auto_memory_config",
+    "check_java",
     "check_port_available",
     "detect_running_neo4j",
     "probe_port",

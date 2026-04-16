@@ -99,12 +99,14 @@ class TestValidateTarball:
 
 class TestConfigFile:
     def _with_temp_home(self):
-        """Patch config paths to a temp directory."""
+        """Patch config paths to a temp directory and invalidate cache."""
         import graphmana.config_file as cf
 
         tmpdir = tempfile.mkdtemp()
         cf.CONFIG_DIR = Path(tmpdir) / ".graphmana"
         cf.CONFIG_PATH = cf.CONFIG_DIR / "config.yaml"
+        cf._cached_config = None
+        cf._cache_loaded = False
         return cf
 
     def test_save_load_roundtrip(self):
@@ -149,6 +151,8 @@ class TestGetConfigValue:
         tmpdir = tempfile.mkdtemp()
         cf.CONFIG_DIR = Path(tmpdir) / ".graphmana"
         cf.CONFIG_PATH = cf.CONFIG_DIR / "config.yaml"
+        cf._cached_config = None
+        cf._cache_loaded = False
         cf.save_config(cfg)
         return cf
 
@@ -170,6 +174,8 @@ class TestGetConfigValue:
         tmpdir = tempfile.mkdtemp()
         cf.CONFIG_DIR = Path(tmpdir) / ".graphmana"
         cf.CONFIG_PATH = cf.CONFIG_DIR / "config.yaml"
+        cf._cached_config = None
+        cf._cache_loaded = False
         with mock.patch.dict(os.environ, {"GRAPHMANA_NEO4J_HOME": "/from/env"}):
             assert (
                 get_config_value(
@@ -186,4 +192,6 @@ class TestGetConfigValue:
         tmpdir = tempfile.mkdtemp()
         cf.CONFIG_DIR = Path(tmpdir) / ".graphmana"
         cf.CONFIG_PATH = cf.CONFIG_DIR / "config.yaml"
+        cf._cached_config = None
+        cf._cache_loaded = False
         assert get_config_value("missing", default="fallback") == "fallback"

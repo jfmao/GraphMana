@@ -272,6 +272,7 @@ def run_ingest(
                     source_file=str(vcf_path),
                     database=database or DEFAULT_DATABASE,
                     threads=threads,
+                    assume_homref_on_missing=assume_homref_on_missing,
                 )
 
                 # Update checkpoint: replace old CSVs with merged ones
@@ -303,6 +304,7 @@ def run_ingest(
                         source_file=str(vcf_path),
                         database=database or DEFAULT_DATABASE,
                         threads=threads,
+                        assume_homref_on_missing=assume_homref_on_missing,
                     )
                 except Exception:
                     try:

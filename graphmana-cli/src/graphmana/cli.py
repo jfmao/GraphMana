@@ -215,7 +215,7 @@ def list_formats():
 
 @cli.command("config-show")
 def config_show():
-    """Display current configuration defaults and environment variable overrides."""
+    """Display current configuration: config file, env vars, and defaults."""
     import os
 
     from graphmana.config import (
@@ -228,17 +228,33 @@ def config_show():
         GRAPHMANA_VERSION,
         SCHEMA_VERSION,
     )
+    from graphmana.config_file import CONFIG_PATH, load_config
+
+    cfg = load_config()
 
     click.echo("GraphMana Configuration")
     click.echo("=======================")
+
+    # Config file section
+    if cfg:
+        click.echo(f"\nConfig file: {CONFIG_PATH}")
+        for key in ("neo4j_home", "uri", "user", "database", "bolt_port", "http_port", "data_dir"):
+            val = cfg.get(key)
+            if val is not None:
+                click.echo(f"  {key:<16s} {val}")
+        pw = cfg.get("password")
+        click.echo(f"  {'password':<16s} {'(set)' if pw else '(not set)'}")
+    else:
+        click.echo(f"\nConfig file: {CONFIG_PATH}  (not found — run 'graphmana setup-neo4j')")
+
     click.echo()
-    click.echo("Connection:")
-    uri_env = os.environ.get("GRAPHMANA_NEO4J_URI")
-    click.echo(f"  Neo4j URI:      {DEFAULT_NEO4J_URI}" + (f"  (from env)" if uri_env else ""))
-    click.echo(f"  Neo4j user:     {DEFAULT_NEO4J_USER}")
-    pw_env = os.environ.get("GRAPHMANA_NEO4J_PASSWORD")
-    click.echo(f"  Neo4j password: {'(from env)' if pw_env else '(default)'}")
-    click.echo(f"  Database:       {DEFAULT_DATABASE}")
+    click.echo("Resolved connection (CLI > config file > env > default):")
+    from graphmana.config_file import get_config_value
+
+    click.echo(f"  Neo4j URI:      {get_config_value('uri', default=DEFAULT_NEO4J_URI)}")
+    click.echo(f"  Neo4j user:     {get_config_value('user', default=DEFAULT_NEO4J_USER)}")
+    click.echo(f"  Neo4j password: {'(configured)' if get_config_value('password') else '(default)'}")
+    click.echo(f"  Database:       {get_config_value('database', default=DEFAULT_DATABASE)}")
     click.echo()
     click.echo("Processing:")
     click.echo(f"  Batch size:     {DEFAULT_BATCH_SIZE:,}")
@@ -3171,6 +3187,7 @@ def setup_neo4j(
             bolt_port=bolt_port,
             http_port=http_port,
             password=password,
+            skip_port_check=adopt,
         )
 
         # ---- Adopt: restart if needed ----
@@ -3335,7 +3352,7 @@ def doctor(verbose):
     from pathlib import Path
 
     from graphmana.cluster.neo4j_lifecycle import (
-        _check_java,
+        check_java,
         detect_running_neo4j,
         probe_port,
     )
@@ -3345,7 +3362,7 @@ def doctor(verbose):
 
     # 1. Java
     try:
-        jv = _check_java()
+        jv = check_java()
         checks.append(("OK", f"Java 21+ found: {jv}"))
     except Exception:
         checks.append(("FAIL", "Java 21+ not found. Install via: conda install -c conda-forge openjdk=21"))
@@ -3851,13 +3868,20 @@ def info(neo4j_home, neo4j_uri, neo4j_user, neo4j_password, database):
 
 
 @db.command()
-@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--neo4j-home", type=click.Path(exists=True, file_okay=False), default=None,
+              help="Neo4j installation directory (reads from config if omitted).")
 @click.option("--database", default=DEFAULT_DATABASE)
 def check(neo4j_home, database):
     """Run Neo4j consistency check on the database."""
     import subprocess
     from pathlib import Path
 
+    from graphmana.config_file import get_config_value
+
+    neo4j_home = get_config_value("neo4j_home", cli_value=neo4j_home)
+    if neo4j_home is None:
+        click.echo("Error: --neo4j-home required (no config file found).", err=True)
+        sys.exit(1)
     neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
     if not neo4j_admin.exists():
         click.echo(f"Error: neo4j-admin not found at {neo4j_admin}", err=True)
@@ -3880,13 +3904,20 @@ def check(neo4j_home, database):
 
 
 @db.command()
-@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--neo4j-home", type=click.Path(exists=True, file_okay=False), default=None,
+              help="Neo4j installation directory (reads from config if omitted).")
 @click.option("--new-password", required=True, prompt=True, hide_input=True, confirmation_prompt=True)
 def password(neo4j_home, new_password):
     """Change the Neo4j password."""
     import subprocess
     from pathlib import Path
 
+    from graphmana.config_file import get_config_value
+
+    neo4j_home = get_config_value("neo4j_home", cli_value=neo4j_home)
+    if neo4j_home is None:
+        click.echo("Error: --neo4j-home required (no config file found).", err=True)
+        sys.exit(1)
     neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
     result = subprocess.run(
         [str(neo4j_admin), "dbms", "set-initial-password", new_password],
@@ -3900,7 +3931,8 @@ def password(neo4j_home, new_password):
 
 
 @db.command()
-@click.option("--neo4j-home", required=True, type=click.Path(exists=True, file_okay=False))
+@click.option("--neo4j-home", type=click.Path(exists=True, file_okay=False), default=None,
+              help="Neo4j installation directory (reads from config if omitted).")
 @click.option("--database", default=DEFAULT_DATABASE)
 @click.option("--destination", required=True, type=click.Path(), help="Destination directory.")
 def copy(neo4j_home, database, destination):
@@ -3909,6 +3941,12 @@ def copy(neo4j_home, database, destination):
     import tempfile
     from pathlib import Path
 
+    from graphmana.config_file import get_config_value
+
+    neo4j_home = get_config_value("neo4j_home", cli_value=neo4j_home)
+    if neo4j_home is None:
+        click.echo("Error: --neo4j-home required (no config file found).", err=True)
+        sys.exit(1)
     neo4j_admin = Path(neo4j_home) / "bin" / "neo4j-admin"
     dest = Path(destination)
     dest.mkdir(parents=True, exist_ok=True)

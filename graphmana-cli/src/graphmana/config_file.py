@@ -53,31 +53,54 @@ def save_config(cfg: dict) -> Path:
     except OSError:
         pass
 
+    # Invalidate the read cache so the next get_config_value sees the new data.
+    global _cached_config, _cache_loaded
+    _cached_config = None
+    _cache_loaded = False
+
     logger.info("Config written to %s", CONFIG_PATH)
     return CONFIG_PATH
+
+
+_cached_config: dict | None = None
+_cache_loaded: bool = False
 
 
 def load_config() -> dict | None:
     """Load ``~/.graphmana/config.yaml`` and return it as a dict.
 
+    The result is cached after the first successful (or unsuccessful) read
+    so that multiple ``get_config_value`` calls within the same process do
+    not re-read the file from disk.
+
     Returns ``None`` if the file does not exist or cannot be parsed.
     """
+    global _cached_config, _cache_loaded
+    if _cache_loaded:
+        return _cached_config
+
     if not CONFIG_PATH.exists():
+        _cache_loaded = True
+        _cached_config = None
         return None
 
     try:
         import yaml
     except ImportError:
         logger.debug("PyYAML not installed; cannot load config file.")
+        _cache_loaded = True
+        _cached_config = None
         return None
 
     try:
         with open(CONFIG_PATH) as f:
             data = yaml.safe_load(f)
-        return data if isinstance(data, dict) else None
+        _cached_config = data if isinstance(data, dict) else None
     except Exception as exc:
         logger.warning("Failed to parse %s: %s", CONFIG_PATH, exc)
-        return None
+        _cached_config = None
+    _cache_loaded = True
+    return _cached_config
 
 
 def get_config_value(
