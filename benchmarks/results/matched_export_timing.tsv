@@ -1,0 +1,3 @@
+operation	path	variants	samples	populations	run1_sec	run2_sec	run3_sec	median_sec	notes
+treemix	FAST	1066557	3202	5	46.6	46.0	46.0	46.0	full chr22 all 5 populations
+plink	FULL	925730	3202	5	75.4	51.5	74.7	74.7	biallelic SNPs only (140827 non-SNP skipped)
