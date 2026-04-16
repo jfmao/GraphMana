@@ -26,7 +26,7 @@ from graphmana.ingest.array_ops import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BATCH_SIZE = 500
+INCREMENTAL_CYPHER_BATCH_SIZE = 500
 
 
 @dataclass
@@ -103,7 +103,7 @@ class IncrementalIngester:
     n_populations_created: int = field(default=0, init=False)
     _server_side_available: bool | None = field(default=None, init=False)
 
-    def run(self, parser, *, chunk_size: int = DEFAULT_BATCH_SIZE, filter_chain=None) -> dict:
+    def run(self, parser, *, chunk_size: int = INCREMENTAL_CYPHER_BATCH_SIZE, filter_chain=None) -> dict:
         """Run the full incremental ingestion pipeline.
 
         Streams the VCF chromosome-by-chromosome so that only one

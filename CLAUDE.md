@@ -294,6 +294,7 @@ Export filters on graph properties pushed into Cypher WHERE clauses.
     pop_ids[], ac[], an[], af[], het_count[], hom_alt_count[], het_exp[],
     ac_total, an_total, af_total, call_rate,
     gt_packed: byte[], phase_packed: byte[], ploidy_packed: byte[],
+    called_packed: byte[], gt_encoding: string,
     ancestral_allele, is_polarized, qual, filter,
     consequence, impact, gene_symbol, info_raw, csq_raw,
     multiallelic_site, allele_index, population_specificity,

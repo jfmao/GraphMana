@@ -27,6 +27,32 @@ def cli():
     """GraphMana — Graph-native data management for variant genomics."""
 
 
+def _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password):
+    """Resolve Neo4j connection params from CLI > config.yaml > env > default.
+
+    Called at the top of every command that accepts --neo4j-uri/user/password.
+    Click options keep their hardcoded defaults for --help display; this
+    function overrides them with config.yaml values when the user didn't pass
+    an explicit flag.
+    """
+    from graphmana.config_file import get_config_value
+
+    uri = get_config_value(
+        "uri", cli_value=(neo4j_uri if neo4j_uri != DEFAULT_NEO4J_URI else None),
+        env_var="GRAPHMANA_NEO4J_URI", default=DEFAULT_NEO4J_URI,
+    )
+    user = get_config_value(
+        "user", cli_value=(neo4j_user if neo4j_user != DEFAULT_NEO4J_USER else None),
+        env_var="GRAPHMANA_NEO4J_USER", default=DEFAULT_NEO4J_USER,
+    )
+    pw = get_config_value(
+        "password",
+        cli_value=(neo4j_password if neo4j_password != DEFAULT_NEO4J_PASSWORD else None),
+        env_var="GRAPHMANA_NEO4J_PASSWORD", default=DEFAULT_NEO4J_PASSWORD,
+    )
+    return uri, user, pw
+
+
 # ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------
@@ -41,6 +67,7 @@ def cli():
 @click.option("--detailed", is_flag=True, help="Show detailed statistics.")
 def status(neo4j_uri, neo4j_user, neo4j_password, database, output_json, detailed):
     """Show database status and node counts."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             counts = {}
@@ -1425,6 +1452,7 @@ def cohort():
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_define(name, cypher_query, description, neo4j_uri, neo4j_user, neo4j_password, database):
     """Define or update a named cohort."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1444,6 +1472,7 @@ def cohort_define(name, cypher_query, description, neo4j_uri, neo4j_user, neo4j_
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_list(neo4j_uri, neo4j_user, neo4j_password, database):
     """List all cohort definitions."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1469,6 +1498,7 @@ def cohort_list(neo4j_uri, neo4j_user, neo4j_password, database):
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_show(name, neo4j_uri, neo4j_user, neo4j_password, database):
     """Show details of a named cohort."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1495,6 +1525,7 @@ def cohort_show(name, neo4j_uri, neo4j_user, neo4j_password, database):
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_delete(name, neo4j_uri, neo4j_user, neo4j_password, database):
     """Delete a named cohort."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1519,6 +1550,7 @@ def cohort_delete(name, neo4j_uri, neo4j_user, neo4j_password, database):
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_count(name, neo4j_uri, neo4j_user, neo4j_password, database):
     """Count samples matching a named cohort."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1539,6 +1571,7 @@ def cohort_count(name, neo4j_uri, neo4j_user, neo4j_password, database):
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def cohort_validate(cypher_query, neo4j_uri, neo4j_user, neo4j_password, database):
     """Validate a Cypher query for cohort use."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.cohort.manager import CohortManager
@@ -1583,6 +1616,7 @@ def sample():
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def sample_remove(sample_ids, sample_list, reason, neo4j_uri, neo4j_user, neo4j_password, database):
     """Soft-delete samples (set excluded=true)."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     ids = list(sample_ids)
     if sample_list:
         from graphmana.sample.manager import load_sample_ids_from_file
@@ -1622,6 +1656,7 @@ def sample_remove(sample_ids, sample_list, reason, neo4j_uri, neo4j_user, neo4j_
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def sample_restore(sample_ids, sample_list, neo4j_uri, neo4j_user, neo4j_password, database):
     """Restore soft-deleted samples (clear excluded flag)."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     ids = list(sample_ids)
     if sample_list:
         from graphmana.sample.manager import load_sample_ids_from_file
@@ -1653,6 +1688,7 @@ def sample_restore(sample_ids, sample_list, neo4j_uri, neo4j_user, neo4j_passwor
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def sample_list(population, show_excluded, neo4j_uri, neo4j_user, neo4j_password, database):
     """List samples with status."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.sample.manager import SampleManager
@@ -1846,6 +1882,7 @@ def sample_hard_remove(
 @click.option("--verbose/--quiet", default=False, help="Verbose logging.")
 def qc(qc_type, output, output_format, neo4j_uri, neo4j_user, neo4j_password, database, verbose):
     """Run quality control checks and generate a report."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     _setup_logging(verbose)
     try:
         from pathlib import Path
@@ -1962,6 +1999,7 @@ def annotate_load(
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def annotate_list(neo4j_uri, neo4j_user, neo4j_password, database):
     """List all annotation versions."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.annotation.manager import AnnotationManager
@@ -1991,6 +2029,7 @@ def annotate_list(neo4j_uri, neo4j_user, neo4j_password, database):
 @click.option("--database", default=DEFAULT_DATABASE, help="Neo4j database name.")
 def annotate_remove(version, neo4j_uri, neo4j_user, neo4j_password, database):
     """Remove an annotation version and its edges."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.annotation.manager import AnnotationManager
@@ -2581,6 +2620,7 @@ def liftover(
 @click.option("--verbose/--quiet", default=False, help="Verbose logging.")
 def migrate(neo4j_uri, neo4j_user, neo4j_password, database, dry_run, verbose):
     """Apply pending schema migrations to the database."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     _setup_logging(verbose)
 
     try:
@@ -2727,6 +2767,7 @@ def provenance():
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 def provenance_list(neo4j_uri, neo4j_user, neo4j_password, database, output_json):
     """List all ingestion logs."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.provenance.manager import ProvenanceManager
@@ -2761,6 +2802,7 @@ def provenance_list(neo4j_uri, neo4j_user, neo4j_password, database, output_json
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 def provenance_show(log_id, neo4j_uri, neo4j_user, neo4j_password, database, output_json):
     """Show details of a single ingestion log."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.provenance.manager import ProvenanceManager
@@ -2788,6 +2830,7 @@ def provenance_show(log_id, neo4j_uri, neo4j_user, neo4j_password, database, out
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 def provenance_headers(neo4j_uri, neo4j_user, neo4j_password, database, output_json):
     """List all VCF header records."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.provenance.manager import ProvenanceManager
@@ -2819,6 +2862,7 @@ def provenance_headers(neo4j_uri, neo4j_user, neo4j_password, database, output_j
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 def provenance_summary(neo4j_uri, neo4j_user, neo4j_password, database, output_json):
     """Show aggregate provenance summary."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             from graphmana.provenance.manager import ProvenanceManager
@@ -2904,6 +2948,7 @@ def provenance_search(
               help="Save current database state to this .summary.json file.")
 def diff(neo4j_uri, neo4j_user, neo4j_password, database, snapshot_path, save_current):
     """Compare current database state against a saved snapshot summary."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     from pathlib import Path
 
     from graphmana.snapshot.diff import capture_db_summary, diff_summaries, load_summary, save_summary
@@ -2935,6 +2980,7 @@ def diff(neo4j_uri, neo4j_user, neo4j_password, database, snapshot_path, save_cu
 @click.option("--output", required=True, type=click.Path(), help="Output .summary.json path.")
 def save_state(neo4j_uri, neo4j_user, neo4j_password, database, output):
     """Save current database state summary for later comparison with diff."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     from pathlib import Path
 
     from graphmana.snapshot.diff import capture_db_summary, save_summary
@@ -3817,6 +3863,7 @@ def db():
 @click.option("--database", default=DEFAULT_DATABASE)
 def info(neo4j_home, neo4j_uri, neo4j_user, neo4j_password, database):
     """Show database size, location, Neo4j version, and connection status."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     import os
 
     # Try connecting
@@ -3981,6 +4028,7 @@ def copy(neo4j_home, database, destination):
 @click.option("--fix", is_flag=True, help="Attempt to fix detected issues.")
 def validate(neo4j_uri, neo4j_user, neo4j_password, database, fix):
     """Validate database integrity: packed array sizes, population arrays, NEXT chains."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     try:
         with GraphManaConnection(neo4j_uri, neo4j_user, neo4j_password, database=database) as conn:
             issues = []
@@ -4104,6 +4152,7 @@ def validate(neo4j_uri, neo4j_user, neo4j_password, database, fix):
 @click.option("--output", "output_file", type=click.Path(), default=None, help="Write to file.")
 def summary(neo4j_uri, neo4j_user, neo4j_password, database, output_file):
     """Generate a human-readable dataset summary report."""
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     lines = []
 
     try:
@@ -4238,6 +4287,7 @@ def query(cypher, query_file, neo4j_uri, neo4j_user, neo4j_password, database, o
       graphmana query "MATCH (p:Population) RETURN p.populationId, p.n_samples" --format csv
       graphmana query --file my_query.cypher --format json
     """
+    neo4j_uri, neo4j_user, neo4j_password = _resolve_neo4j_connection(neo4j_uri, neo4j_user, neo4j_password)
     if query_file:
         from pathlib import Path
 
