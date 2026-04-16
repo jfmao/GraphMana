@@ -141,6 +141,89 @@ graphmana status --detailed
 graphmana export --format treemix --output output.treemix.gz
 ```
 
+## Using an existing Neo4j installation
+
+If Neo4j 5.26.x is already installed on your machine, point GraphMana at it:
+
+```bash
+graphmana setup-neo4j --install-dir /path/to/existing/neo4j-parent --skip-download
+```
+
+This skips the download and only deploys the GraphMana procedures JAR, sets
+the password, and writes `~/.graphmana/config.yaml`. Subsequent commands
+(`neo4j-start`, `ingest`, `export`, etc.) read the config file automatically
+— you no longer need `--neo4j-home` on every invocation.
+
+If the existing Neo4j is **running**, use `--adopt` to deploy the plugin and
+restart it:
+
+```bash
+graphmana setup-neo4j --install-dir /path/to/neo4j-parent --adopt
+```
+
+The `--adopt` path stops and restarts the instance (an interactive confirmation
+is required unless `--i-understand-this-restarts-neo4j` is passed). It is
+intended for user-owned, single-user installs only — not shared system Neo4j
+at `/opt/neo4j` or container-managed instances. For those, install a separate
+GraphMana-managed Neo4j on different ports (see below).
+
+## Offline / air-gapped install
+
+If the target machine cannot reach the internet, download the Neo4j tarball
+on a machine that can and transfer it:
+
+1. Download from the [GraphMana Zenodo deposit](https://doi.org/10.5281/zenodo.19603203)
+   or from `https://dist.neo4j.org/neo4j-community-5.26.0-unix.tar.gz`.
+2. Transfer to the target machine.
+3. Run:
+
+```bash
+graphmana setup-neo4j \
+    --install-dir ~/neo4j \
+    --neo4j-tarball /path/to/neo4j-community-5.26.0-unix.tar.gz \
+    --memory-auto
+```
+
+The `--neo4j-tarball` flag validates the filename against the pattern
+`neo4j-community-5.26.x-unix.tar.gz` and extracts the version automatically.
+
+To also deploy a local copy of the procedures JAR (instead of the bundled
+one), add `--deploy-plugin /path/to/graphmana-procedures.jar`.
+
+## Port conflicts and multiple Neo4j instances
+
+If another Neo4j is already listening on port 7687, `setup-neo4j` will refuse
+to proceed and print instructions:
+
+```
+Error: Bolt port 7687 is already in use (PID 12345).
+
+Options:
+  1. Stop the existing process:  kill 12345
+  2. Install on different ports:
+     graphmana setup-neo4j --bolt-port 7688 --http-port 7475 ...
+  3. Adopt the running instance:
+     graphmana setup-neo4j --adopt --install-dir <existing-neo4j-home> ...
+```
+
+To run GraphMana's Neo4j alongside another instance:
+
+```bash
+graphmana setup-neo4j --install-dir ~/graphmana-neo4j --bolt-port 7688 --http-port 7475
+```
+
+The chosen ports are stored in `~/.graphmana/config.yaml` and used by all
+subsequent commands automatically.
+
+To check the full installation health at any time:
+
+```bash
+graphmana doctor
+```
+
+This verifies Java, Neo4j home, running process, port reachability, plugin
+deployment, config file, data directory filesystem, and password strength.
+
 ## Troubleshooting
 
 **cyvcf2 installation fails**: Use conda (not pip) to install cyvcf2:
@@ -152,5 +235,5 @@ to user space, or `module load java/21` on HPC clusters.
 **Neo4j extremely slow**: Ensure the data directory is on local SSD, not NFS.
 Run `graphmana check-filesystem --neo4j-data-dir /path/to/data`.
 
-**Port 7687 in use**: Another Neo4j instance is running. Stop it or change ports
-in `neo4j.conf`.
+**Port 7687 in use**: See "Port conflicts" section above, or run
+`graphmana doctor` for a full diagnostic.

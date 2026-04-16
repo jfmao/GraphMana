@@ -27,6 +27,169 @@ NEO4J_DEFAULT_BOLT_PORT = 7687
 NEO4J_DEFAULT_HTTP_PORT = 7474
 NEO4J_DOWNLOAD_URL_TEMPLATE = "https://dist.neo4j.org/neo4j-community-{version}-unix.tar.gz"
 NEO4J_DEFAULT_VERSION = "5.26.2"
+_TARBALL_RE = re.compile(r"neo4j-community-(5\.26\.\d+)-unix\.tar\.gz$")
+
+
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class PortConflictError(RuntimeError):
+    """Raised when a required port is already in use."""
+
+    def __init__(self, port: int, pid: str | None, instructions: str) -> None:
+        self.port = port
+        self.pid = pid
+        self.instructions = instructions
+        super().__init__(instructions)
+
+
+# ---------------------------------------------------------------------------
+# Port and process helpers
+# ---------------------------------------------------------------------------
+
+
+def probe_port(port: int) -> str | None:
+    """Check whether ``port`` is in use on localhost.
+
+    Returns the PID of the listener (as a string) if occupied, or ``None``
+    if the port is free. Falls back to ``ss``/``lsof`` for PID lookup.
+    """
+    import socket
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        result = sock.connect_ex(("127.0.0.1", port))
+        if result != 0:
+            return None
+    finally:
+        sock.close()
+
+    # Port is occupied — try to find the PID.
+    for cmd in (
+        ["lsof", "-ti", f":{port}"],
+        ["ss", "-tlnp", f"sport = :{port}"],
+    ):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            pid_str = out.stdout.strip().split("\n")[0].strip()
+            if pid_str:
+                # ss output may need parsing: extract pid=XXXX
+                m = re.search(r"pid=(\d+)", pid_str)
+                if m:
+                    return m.group(1)
+                if pid_str.isdigit():
+                    return pid_str
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return "unknown"
+
+
+def check_port_available(
+    bolt_port: int = NEO4J_DEFAULT_BOLT_PORT,
+    http_port: int = NEO4J_DEFAULT_HTTP_PORT,
+) -> None:
+    """Verify that the Bolt and HTTP ports are free.
+
+    Raises :class:`PortConflictError` with an actionable message if either
+    port is occupied.
+    """
+    for port, label in [(bolt_port, "Bolt"), (http_port, "HTTP")]:
+        pid = probe_port(port)
+        if pid is not None:
+            alt_bolt = bolt_port + 1 if label == "Bolt" else bolt_port
+            alt_http = http_port + 1 if label == "HTTP" else http_port
+            instructions = (
+                f"{label} port {port} is already in use"
+                + (f" (PID {pid})" if pid != "unknown" else "")
+                + ".\n\nOptions:\n"
+                f"  1. Stop the existing process:  kill {pid}\n"
+                f"  2. Install on different ports:\n"
+                f"     graphmana setup-neo4j --bolt-port {alt_bolt} "
+                f"--http-port {alt_http} ...\n"
+                f"  3. Adopt the running instance:\n"
+                f"     graphmana setup-neo4j --adopt --install-dir <existing-neo4j-home> ..."
+            )
+            raise PortConflictError(port, pid, instructions)
+
+
+def detect_running_neo4j() -> dict | None:
+    """Detect a running Neo4j process on this machine.
+
+    Returns ``{pid, cmdline}`` if found, else ``None``.
+    """
+    try:
+        result = subprocess.run(
+            ["pgrep", "-fa", "neo4j"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line and "java" in line.lower() and "neo4j" in line.lower():
+                parts = line.split(None, 1)
+                return {"pid": parts[0], "cmdline": parts[1] if len(parts) > 1 else ""}
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def validate_tarball_filename(path: str | Path) -> str:
+    """Validate that a tarball filename matches the expected Neo4j 5.26.x pattern.
+
+    Args:
+        path: path to the tarball file.
+
+    Returns:
+        The extracted version string (e.g. ``"5.26.0"``).
+
+    Raises:
+        ValueError: if the filename does not match ``neo4j-community-5.26.\\d+-unix.tar.gz``.
+    """
+    name = Path(path).name
+    m = _TARBALL_RE.match(name)
+    if not m:
+        raise ValueError(
+            f"Tarball filename '{name}' does not match the expected pattern "
+            f"'neo4j-community-5.26.X-unix.tar.gz'. "
+            f"GraphMana requires Neo4j Community 5.26.x."
+        )
+    return m.group(1)
+
+
+def set_neo4j_password(neo4j_home: str | Path, password: str) -> None:
+    """Set the initial Neo4j password via ``neo4j-admin``.
+
+    Handles the "password already set" case gracefully.
+    """
+    admin_bin = Path(neo4j_home) / "bin" / "neo4j-admin"
+    if not admin_bin.exists():
+        logger.warning("neo4j-admin not found at %s; skipping password setup.", admin_bin)
+        return
+
+    try:
+        result = subprocess.run(
+            [str(admin_bin), "dbms", "set-initial-password", password],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            logger.info("Neo4j initial password set.")
+        else:
+            combined = result.stderr + result.stdout
+            if "already" in combined.lower():
+                logger.info("Neo4j password already set (use Neo4j browser to change).")
+            else:
+                logger.warning("neo4j-admin password setup: %s", combined.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.warning("Could not set Neo4j password: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
 
 
 def setup_neo4j(
@@ -35,51 +198,84 @@ def setup_neo4j(
     version: str = NEO4J_DEFAULT_VERSION,
     data_dir: str | Path | None = None,
     memory_auto: bool = False,
+    skip_download: bool = False,
+    neo4j_tarball: str | Path | None = None,
+    deploy_plugin: str | Path | None = None,
+    bolt_port: int = NEO4J_DEFAULT_BOLT_PORT,
+    http_port: int = NEO4J_DEFAULT_HTTP_PORT,
+    password: str | None = None,
 ) -> dict:
     """Download and configure Neo4j Community for user-space operation.
 
     Args:
-        install_dir: Directory to install Neo4j into. A ``neo4j-community-*``
-            subdirectory will be created.
-        version: Neo4j version to download.
-        data_dir: Custom data directory path. If provided, neo4j.conf is
-            updated to use this path.
-        memory_auto: If True, auto-set heap and page cache based on
-            available RAM.
+        install_dir: Directory to install Neo4j into.
+        version: Neo4j version to download (ignored when *neo4j_tarball* is set).
+        data_dir: Custom data directory path.
+        memory_auto: Auto-set heap and page cache from available RAM.
+        skip_download: Use existing Neo4j at *install_dir* without downloading.
+        neo4j_tarball: Path to a pre-downloaded ``neo4j-community-5.26.x-unix.tar.gz``
+            for offline install. The filename is validated against a strict pattern.
+        deploy_plugin: Path to a user-provided ``graphmana-procedures.jar``. When
+            set, the bundled JAR is not deployed.
+        bolt_port: Bolt protocol port (written to ``neo4j.conf``).
+        http_port: HTTP browser port (written to ``neo4j.conf``).
+        password: Initial Neo4j password. Set via ``neo4j-admin``.
 
     Returns:
-        Dict with neo4j_home, version, data_dir, java_version.
+        Dict with neo4j_home, version, data_dir, java_version, bolt_port, http_port.
 
     Raises:
         RuntimeError: If Java 21+ is not available.
+        PortConflictError: If the requested ports are already in use.
+        ValueError: If *neo4j_tarball* has an invalid filename.
     """
     install_dir = Path(install_dir)
     install_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check Java
+    # ---- Port check (fail early) ----
+    check_port_available(bolt_port, http_port)
+
+    # ---- Java check ----
     java_version = _check_java()
+
+    # ---- Determine version from tarball if provided ----
+    if neo4j_tarball is not None:
+        tarball_path = Path(neo4j_tarball)
+        if not tarball_path.exists():
+            raise FileNotFoundError(f"Tarball not found: {tarball_path}")
+        version = validate_tarball_filename(tarball_path)
 
     neo4j_home = install_dir / f"neo4j-community-{version}"
 
-    if neo4j_home.exists():
+    # ---- Download / extract / skip ----
+    if skip_download:
+        if not neo4j_home.exists() or not (neo4j_home / "bin" / "neo4j").exists():
+            raise FileNotFoundError(
+                f"--skip-download: Neo4j not found at {neo4j_home}. "
+                f"Install it first, or remove --skip-download."
+            )
+        logger.info("Using existing Neo4j at %s (--skip-download)", neo4j_home)
+    elif neo4j_tarball is not None:
+        if neo4j_home.exists():
+            logger.info("Neo4j already extracted at %s", neo4j_home)
+        else:
+            logger.info("Extracting %s to %s ...", tarball_path.name, install_dir)
+            with tarfile.open(tarball_path, "r:gz") as tar:
+                tar.extractall(path=install_dir)
+    elif neo4j_home.exists():
         logger.info("Neo4j already installed at %s", neo4j_home)
     else:
-        # Download and extract
         tarball_url = NEO4J_DOWNLOAD_URL_TEMPLATE.format(version=version)
-        tarball_path = install_dir / f"neo4j-community-{version}-unix.tar.gz"
-
-        if not tarball_path.exists():
+        tarball_path_dl = install_dir / f"neo4j-community-{version}-unix.tar.gz"
+        if not tarball_path_dl.exists():
             logger.info("Downloading Neo4j %s ...", version)
-            _download_file(tarball_url, tarball_path)
-
+            _download_file(tarball_url, tarball_path_dl)
         logger.info("Extracting to %s ...", install_dir)
-        with tarfile.open(tarball_path, "r:gz") as tar:
+        with tarfile.open(tarball_path_dl, "r:gz") as tar:
             tar.extractall(path=install_dir)
+        tarball_path_dl.unlink(missing_ok=True)
 
-        # Clean up tarball
-        tarball_path.unlink(missing_ok=True)
-
-    # Configure
+    # ---- Configure ----
     conf_path = neo4j_home / "conf" / "neo4j.conf"
     actual_data_dir = Path(data_dir) if data_dir else neo4j_home / "data"
 
@@ -94,14 +290,33 @@ def setup_neo4j(
         _set_conf_value(conf_path, "server.memory.pagecache.size", pagecache)
         logger.info("Memory auto-configured: heap=%s, pagecache=%s", heap, pagecache)
 
+    # Port configuration (non-default)
+    if bolt_port != NEO4J_DEFAULT_BOLT_PORT:
+        _set_conf_value(conf_path, "server.bolt.listen_address", f":{bolt_port}")
+    if http_port != NEO4J_DEFAULT_HTTP_PORT:
+        _set_conf_value(conf_path, "server.http.listen_address", f":{http_port}")
+
+    # Allow GraphMana procedures
+    _set_conf_value(conf_path, "dbms.security.procedures.unrestricted", "graphmana.*")
+
     # Make scripts executable
     bin_dir = neo4j_home / "bin"
     for script in bin_dir.glob("*"):
         if script.is_file() and not script.suffix:
             script.chmod(script.stat().st_mode | 0o755)
 
-    # Deploy bundled GraphMana procedures JAR to plugins/
-    _deploy_procedures_jar(neo4j_home)
+    # ---- Plugin deployment ----
+    if deploy_plugin:
+        dest = neo4j_home / "plugins" / "graphmana-procedures.jar"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(deploy_plugin, dest)
+        logger.info("User-provided plugin deployed to %s", dest)
+    else:
+        _deploy_procedures_jar(neo4j_home)
+
+    # ---- Password ----
+    if password:
+        set_neo4j_password(neo4j_home, password)
 
     logger.info("Neo4j %s ready at %s", version, neo4j_home)
 
@@ -110,6 +325,8 @@ def setup_neo4j(
         "version": version,
         "data_dir": str(actual_data_dir),
         "java_version": java_version,
+        "bolt_port": bolt_port,
+        "http_port": http_port,
     }
 
 

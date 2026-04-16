@@ -3035,22 +3035,124 @@ def ref_check(
     is_flag=True,
     help="Download Eclipse Temurin JDK 21 to user space (no admin needed).",
 )
-def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose, install_java):
+@click.option(
+    "--skip-download",
+    is_flag=True,
+    help="Use existing Neo4j at --install-dir (skip download).",
+)
+@click.option(
+    "--neo4j-tarball",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help=(
+        "Path to a pre-downloaded neo4j-community-5.26.x-unix.tar.gz for "
+        "offline install. Available from the GraphMana Zenodo deposit "
+        "(DOI 10.5281/zenodo.19603203) or https://dist.neo4j.org/."
+    ),
+)
+@click.option(
+    "--deploy-plugin",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to a local graphmana-procedures.jar (skip bundled JAR).",
+)
+@click.option(
+    "--bolt-port",
+    type=int,
+    default=7687,
+    help="Bolt protocol port (default: 7687). Change if another Neo4j is running.",
+)
+@click.option(
+    "--http-port",
+    type=int,
+    default=7474,
+    help="HTTP browser port (default: 7474).",
+)
+@click.option(
+    "--password",
+    prompt=True,
+    hide_input=True,
+    confirmation_prompt=True,
+    help="Neo4j password for the 'neo4j' user.",
+)
+@click.option(
+    "--adopt",
+    is_flag=True,
+    help=(
+        "Adopt an existing user-owned Neo4j installation: deploy the "
+        "GraphMana procedures plugin, set the password, and write the "
+        "config file. The instance will be restarted."
+    ),
+)
+@click.option(
+    "--i-understand-this-restarts-neo4j",
+    is_flag=True,
+    hidden=True,
+    help="Confirm that --adopt will restart the Neo4j instance.",
+)
+def setup_neo4j(
+    install_dir,
+    neo4j_version,
+    data_dir,
+    memory_auto,
+    verbose,
+    install_java,
+    skip_download,
+    neo4j_tarball,
+    deploy_plugin,
+    bolt_port,
+    http_port,
+    password,
+    adopt,
+    i_understand_this_restarts_neo4j,
+):
     """Download and configure Neo4j for user-space operation.
 
     Automatically deploys the bundled GraphMana procedures JAR to the
-    Neo4j plugins directory. Use --install-java to also download a JDK
-    if Java 21+ is not already installed.
+    Neo4j plugins directory. Creates a persistent config file at
+    ~/.graphmana/config.yaml so subsequent commands do not need
+    --neo4j-home or --neo4j-password on every invocation.
+
+    \b
+    Examples:
+      graphmana setup-neo4j --install-dir ~/neo4j --memory-auto
+      graphmana setup-neo4j --install-dir ~/neo4j --neo4j-tarball neo4j.tar.gz
+      graphmana setup-neo4j --install-dir ~/neo4j --skip-download --adopt
+      graphmana setup-neo4j --install-dir ~/neo4j --bolt-port 7688 --http-port 7475
     """
     _setup_logging(verbose)
 
     try:
+        from graphmana.cluster.neo4j_lifecycle import (
+            PortConflictError,
+            detect_running_neo4j,
+            setup_neo4j as _setup,
+            stop_neo4j as _stop,
+            start_neo4j as _start,
+        )
+        from graphmana.config_file import save_config
+
+        # ---- Adopt path (Phase 2) ----
+        if adopt:
+            running = detect_running_neo4j()
+            if running:
+                click.echo(
+                    f"Detected running Neo4j (PID {running['pid']})."
+                )
+                if not i_understand_this_restarts_neo4j:
+                    if not click.confirm(
+                        "Adopting will restart this Neo4j instance. Continue?"
+                    ):
+                        click.echo("Aborted.")
+                        return
+            # Adopt uses skip_download implicitly
+            skip_download = True
+
         # Optionally install Java first
         if install_java:
             from graphmana.cluster.neo4j_lifecycle import download_java
 
             java_bin = download_java(install_dir)
-            # Add to PATH for the current process
             import os
 
             java_home = java_bin.parent.parent
@@ -3058,21 +3160,59 @@ def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose, inst
             os.environ["PATH"] = f"{java_bin.parent}:{os.environ.get('PATH', '')}"
             click.echo(f"JDK 21 installed at: {java_home}")
 
-        from graphmana.cluster.neo4j_lifecycle import setup_neo4j as _setup
-
         result = _setup(
             install_dir,
             version=neo4j_version,
             data_dir=data_dir,
             memory_auto=memory_auto,
+            skip_download=skip_download,
+            neo4j_tarball=neo4j_tarball,
+            deploy_plugin=deploy_plugin,
+            bolt_port=bolt_port,
+            http_port=http_port,
+            password=password,
         )
 
-        click.echo(f"Neo4j {result['version']} installed.")
+        # ---- Adopt: restart if needed ----
+        if adopt:
+            running = detect_running_neo4j()
+            if running:
+                click.echo("Stopping Neo4j for plugin deployment...")
+                _stop(result["neo4j_home"])
+            click.echo("Starting Neo4j...")
+            _start(result["neo4j_home"], wait=True)
+
+        # ---- Write config file ----
+        cfg = {
+            "neo4j_home": result["neo4j_home"],
+            "uri": f"bolt://localhost:{bolt_port}",
+            "user": "neo4j",
+            "password": password,
+            "database": "neo4j",
+            "bolt_port": bolt_port,
+            "http_port": http_port,
+            "data_dir": result["data_dir"],
+        }
+        config_path = save_config(cfg)
+
+        click.echo(f"\nNeo4j {result['version']} ready.")
         click.echo(f"  Home:         {result['neo4j_home']}")
         click.echo(f"  Data dir:     {result['data_dir']}")
+        click.echo(f"  Bolt port:    {bolt_port}")
+        click.echo(f"  HTTP port:    {http_port}")
         click.echo(f"  Java:         {result['java_version']}")
         click.echo(f"  Procedures:   JAR deployed to plugins/")
+        click.echo(f"  Config:       {config_path}")
+        click.echo(
+            f"\nNext steps:\n"
+            f"  graphmana neo4j-start              # Start the database\n"
+            f"  graphmana ingest --input data.vcf.gz --population-map panel.tsv\n"
+            f"  graphmana doctor                   # Verify everything works"
+        )
 
+    except PortConflictError as e:
+        click.echo(f"Error: {e.instructions}", err=True)
+        sys.exit(1)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -3081,9 +3221,9 @@ def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose, inst
 @cli.command("neo4j-start")
 @click.option(
     "--neo4j-home",
-    required=True,
     type=click.Path(exists=True, file_okay=False),
-    help="Neo4j installation directory.",
+    default=None,
+    help="Neo4j installation directory (reads from ~/.graphmana/config.yaml if omitted).",
 )
 @click.option(
     "--data-dir",
@@ -3097,6 +3237,17 @@ def setup_neo4j(install_dir, neo4j_version, data_dir, memory_auto, verbose, inst
 def neo4j_start(neo4j_home, data_dir, wait, timeout, verbose):
     """Start Neo4j in user space."""
     _setup_logging(verbose)
+
+    from graphmana.config_file import get_config_value
+
+    neo4j_home = get_config_value("neo4j_home", cli_value=neo4j_home)
+    if neo4j_home is None:
+        click.echo(
+            "Error: --neo4j-home not specified and no config file found.\n"
+            "Run 'graphmana setup-neo4j' first, or pass --neo4j-home explicitly.",
+            err=True,
+        )
+        sys.exit(1)
 
     try:
         from graphmana.cluster.neo4j_lifecycle import start_neo4j
@@ -3116,14 +3267,25 @@ def neo4j_start(neo4j_home, data_dir, wait, timeout, verbose):
 @cli.command("neo4j-stop")
 @click.option(
     "--neo4j-home",
-    required=True,
     type=click.Path(exists=True, file_okay=False),
-    help="Neo4j installation directory.",
+    default=None,
+    help="Neo4j installation directory (reads from config if omitted).",
 )
 @click.option("--verbose/--quiet", default=False, help="Verbose logging.")
 def neo4j_stop(neo4j_home, verbose):
     """Stop a running Neo4j instance."""
     _setup_logging(verbose)
+
+    from graphmana.config_file import get_config_value
+
+    neo4j_home = get_config_value("neo4j_home", cli_value=neo4j_home)
+    if neo4j_home is None:
+        click.echo(
+            "Error: --neo4j-home not specified and no config file found.\n"
+            "Run 'graphmana setup-neo4j' first, or pass --neo4j-home explicitly.",
+            err=True,
+        )
+        sys.exit(1)
 
     try:
         from graphmana.cluster.neo4j_lifecycle import stop_neo4j
@@ -3158,6 +3320,110 @@ def check_filesystem(neo4j_data_dir):
         sys.exit(1)
     else:
         click.echo("Status:     OK (local storage)")
+
+
+@cli.command("doctor")
+@click.option("--verbose/--quiet", default=False, help="Verbose output.")
+def doctor(verbose):
+    """Run diagnostic checks on the GraphMana + Neo4j installation.
+
+    Verifies Java, Neo4j home, running process, port reachability, plugin
+    deployment, config file presence, and data directory filesystem. Prints
+    a one-line summary per check.
+    """
+    _setup_logging(verbose)
+    from pathlib import Path
+
+    from graphmana.cluster.neo4j_lifecycle import (
+        _check_java,
+        detect_running_neo4j,
+        probe_port,
+    )
+    from graphmana.config_file import CONFIG_PATH, load_config
+
+    checks: list[tuple[str, str]] = []
+
+    # 1. Java
+    try:
+        jv = _check_java()
+        checks.append(("OK", f"Java 21+ found: {jv}"))
+    except Exception:
+        checks.append(("FAIL", "Java 21+ not found. Install via: conda install -c conda-forge openjdk=21"))
+
+    # 2. Config file
+    cfg = load_config()
+    if cfg:
+        checks.append(("OK", f"Config file: {CONFIG_PATH}"))
+    else:
+        checks.append(("WARN", f"No config file at {CONFIG_PATH}. Run 'graphmana setup-neo4j' first."))
+
+    # 3. Neo4j home
+    neo4j_home = cfg.get("neo4j_home") if cfg else None
+    if neo4j_home and Path(neo4j_home).exists():
+        checks.append(("OK", f"Neo4j home: {neo4j_home}"))
+    elif neo4j_home:
+        checks.append(("FAIL", f"Neo4j home not found: {neo4j_home}"))
+    else:
+        checks.append(("WARN", "Neo4j home not configured"))
+
+    # 4. Neo4j process
+    running = detect_running_neo4j()
+    if running:
+        checks.append(("OK", f"Neo4j process running (PID {running['pid']})"))
+    else:
+        checks.append(("WARN", "No Neo4j process detected"))
+
+    # 5. Bolt port
+    bolt_port = (cfg or {}).get("bolt_port", 7687)
+    pid = probe_port(bolt_port)
+    if pid is not None:
+        checks.append(("OK", f"Bolt port {bolt_port} reachable"))
+    else:
+        checks.append(("WARN", f"Bolt port {bolt_port} not responding (is Neo4j started?)"))
+
+    # 6. Plugin JAR
+    if neo4j_home:
+        jar = Path(neo4j_home) / "plugins" / "graphmana-procedures.jar"
+        if jar.exists():
+            size_kb = jar.stat().st_size / 1024
+            checks.append(("OK", f"GraphMana procedures JAR deployed ({size_kb:.0f} KB)"))
+        else:
+            checks.append(("FAIL", f"Plugin JAR not found at {jar}"))
+    else:
+        checks.append(("WARN", "Cannot check plugin JAR (neo4j_home not set)"))
+
+    # 7. Data directory filesystem
+    data_dir = (cfg or {}).get("data_dir")
+    if data_dir and Path(data_dir).exists():
+        from graphmana.cluster.filesystem_check import check_neo4j_data_dir
+
+        fs_result = check_neo4j_data_dir(data_dir)
+        if fs_result["is_network"]:
+            checks.append(("WARN", f"Data dir {data_dir} is on network storage ({fs_result['fs_type']})"))
+        else:
+            checks.append(("OK", f"Data dir: {data_dir} ({fs_result['fs_type']}, local)"))
+    elif data_dir:
+        checks.append(("WARN", f"Data dir does not exist: {data_dir}"))
+    else:
+        checks.append(("WARN", "Data dir not configured"))
+
+    # 8. Password check
+    pw = (cfg or {}).get("password")
+    if pw and pw in ("graphmana", "neo4j", "password", "test"):
+        checks.append(("WARN", "Password is a common default — consider changing"))
+    elif pw:
+        checks.append(("OK", "Password is set (non-default)"))
+    else:
+        checks.append(("WARN", "Password not stored in config file"))
+
+    # Print results
+    for status, msg in checks:
+        icon = {"OK": "[OK]  ", "WARN": "[WARN]", "FAIL": "[FAIL]"}[status]
+        click.echo(f"  {icon} {msg}")
+
+    n_fail = sum(1 for s, _ in checks if s == "FAIL")
+    if n_fail:
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
